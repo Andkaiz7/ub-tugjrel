@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="c" width="512" height="512"></canvas>
+<script>
+const c = document.getElementById('c'), g = c.getContext('2d');
+const sky = g.createLinearGradient(0, 0, 0, 512);
+sky.addColorStop(0, '#ffcf4a'); sky.addColorStop(1, '#ff7a2f');
+g.fillStyle = sky; g.fillRect(0, 0, 512, 512);
+g.fillStyle = 'rgba(255,255,255,0.18)';
+for (let i = 0; i < 6; i++) g.fillRect(40 + i * 80, 300 - (i % 3) * 40, 56, 220);
+function road(x1, y1, x2, y2, w, col) {
+  g.lineCap = 'round'; g.strokeStyle = col; g.lineWidth = w;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.setLineDash([22, 18]); g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 6;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); g.setLineDash([]);
+}
+road(-20, 380, 532, 380, 92, '#3d3a4b');
+g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(222, 250, 92, 270);
+road(256, 230, 256, 540, 92, '#6b6880');
+g.strokeStyle = '#fff'; g.lineWidth = 8; g.lineCap = 'butt';
+g.beginPath(); g.moveTo(206, 320); g.lineTo(206, 440); g.moveTo(306, 320); g.lineTo(306, 440); g.stroke();
+function car(x, y, rot, col) {
+  g.save(); g.translate(x, y); g.rotate(rot);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.roundRect(-30, -15, 66, 38, 12); g.fill();
+  g.fillStyle = col; g.beginPath(); g.roundRect(-34, -19, 68, 38, 12); g.fill();
+  g.fillStyle = '#1f2a44'; g.beginPath(); g.roundRect(8, -14, 18, 28, 5); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(-24, -12, 22, 6);
+  g.restore();
+}
+car(70, 380, 0, '#2f7cf6'); car(160, 380, 0, '#22c55e'); car(400, 380, Math.PI, '#ef4444'); car(470, 380, Math.PI, '#f59e0b');
+car(256, 300, Math.PI / 2, '#ef4444'); car(256, 480, Math.PI / 2, '#2f7cf6');
+g.textAlign = 'center'; g.lineJoin = 'round';
+function title(text, y, size) {
+  g.font = '900 ' + size + 'px system-ui, -apple-system, "Segoe UI", sans-serif';
+  g.lineWidth = 18; g.strokeStyle = '#2b1a52'; g.strokeText(text, 256, y);
+  g.fillStyle = '#ffffff'; g.fillText(text, 256, y);
+}
+title('УБ', 128, 120);
+title('ТҮГЖРЭЛ', 226, 92);
+window.done = true;
+</script></body></html>
