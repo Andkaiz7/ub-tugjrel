@@ -1,0 +1,7 @@
+.claude/
+docs/
+.DS_Store
+__pycache__/
+*.log
+credentials.env
+release/deployment*.json
