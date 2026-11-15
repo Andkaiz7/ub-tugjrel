@@ -14,5 +14,5 @@
     "enabled": true,
     "order": "asc"
   },
-  "visibility": "private"
+  "visibility": "public"
 }
