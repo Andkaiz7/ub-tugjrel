@@ -68,7 +68,7 @@
       }
 
       function resize() {
-        dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+        dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1);
         var rectW = canvas.clientWidth;
         var rectH = canvas.clientHeight;
         if ((!rectW || !rectH) && canvas.getBoundingClientRect) {
@@ -1108,6 +1108,7 @@
         tileAt: tileAt,
         draw: draw,
         effect: effect,
+        clearEffects: function () { effects.length = 0; },
         drawTransition: drawTransition
       };
     }

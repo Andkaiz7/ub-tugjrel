@@ -53,6 +53,7 @@ def run(base, stub, viewport, name):
     with sync_playwright() as p:
         b = p.chromium.launch()
         ctx = b.new_context(viewport=viewport, device_scale_factor=2, has_touch=False)
+        ctx.add_init_script('window.__UBT_TEST = true;')
         if stub:
             ctx.add_init_script(STUB)
         pg = ctx.new_page()

@@ -263,6 +263,7 @@
     drag = null;
     preview = null;
     waterGlow = 0;
+    r.clearEffects();
     r.fit(world);
     buildHud();
     refreshTools();
@@ -333,27 +334,42 @@
     updateHud();
   }
 
-  function fill(a, b) {
+  function walk(a, b, xFirst) {
     var W = S.W;
     var ax = a % W;
     var ay = (a - ax) / W;
     var bx = b % W;
     var by = (b - bx) / W;
     var out = [];
-    while (ax !== bx) { ax += ax < bx ? 1 : -1; out.push(ay * W + ax); }
-    while (ay !== by) { ay += ay < by ? 1 : -1; out.push(ay * W + ax); }
+    var stepX = function () { while (ax !== bx) { ax += ax < bx ? 1 : -1; out.push(ay * W + ax); } };
+    var stepY = function () { while (ay !== by) { ay += ay < by ? 1 : -1; out.push(ay * W + ax); } };
+    if (xFirst) { stepX(); stepY(); } else { stepY(); stepX(); }
     return out;
+  }
+  function passable(path) {
+    for (var i = 0; i < path.length; i++) {
+      var k = world.kind[path[i]];
+      if (k === S.K.RIVER || k === S.K.RAIL || k === S.K.BLOCK) return false;
+    }
+    return true;
+  }
+  function fill(a, b, xFirst) {
+    var first = walk(a, b, xFirst);
+    if (passable(first)) return first;
+    var second = walk(a, b, !xFirst);
+    return passable(second) ? second : first;
   }
   function eraseTile(tile) {
     S.eraseAt(world, tile);
     refreshTools();
   }
   function onDown(e) {
-    if (phase !== 'play' || drag) return;
+    if (phase !== 'play') return;
+    if (drag && !e.isPrimary) return;
     clockOn = true;
     var tile = r.tileAt(e.clientX, e.clientY);
     try { cv.setPointerCapture(e.pointerId); } catch (x) {}
-    drag = { id: e.pointerId, last: tile, s: tile, dead: false };
+    drag = { id: e.pointerId, last: tile, s: tile, dead: false, axis: 'x' };
     preview = null;
     if (tile >= 0 && tool === 'erase') eraseTile(tile);
   }
@@ -370,7 +386,10 @@
     var from = drag.last;
     drag.last = tile;
     if (from < 0) { if (tool === 'erase') eraseTile(tile); return; }
-    var path = fill(from, tile);
+    var dx = Math.abs((tile % S.W) - (from % S.W));
+    var dy = Math.abs(((tile / S.W) | 0) - ((from / S.W) | 0));
+    var path = fill(from, tile, dx && dy ? drag.axis !== 'y' : dx > 0);
+    drag.axis = dx >= dy ? 'x' : 'y';
     if (tool === 'erase') { path.forEach(eraseTile); return; }
     if (drag.dead) return;
     var res = S.roadStroke(world, [from].concat(path));
@@ -416,9 +435,10 @@
       if (res !== current) return;
       if (b && b.id === res.id) return;
       var prev = b && typeof b.ms === 'number' ? b.ms : 0;
-      newRecord = !prev || res.ms < prev;
-      bestMs = newRecord ? res.ms : prev;
-      if (newRecord) sSet('best', { id: res.id, ms: res.ms, splits: res.splits });
+      var better = !prev || res.ms < prev;
+      bestMs = better ? res.ms : prev;
+      if (!(res.saved && saveInfo)) newRecord = better;
+      if (better) sSet('best', { id: res.id, ms: res.ms, splits: res.splits });
       renderEnd();
     });
   }
@@ -461,6 +481,7 @@
     submit(res).then(function (a) {
       saving = null;
       res.saved = true;
+      if (res === current && typeof a.best === 'number') newRecord = a.previous == null || res.secs < a.previous;
       setSave(res, 'saved', a);
       clearPendingAfter(res);
       if (res === current && phase === 'end') loadBoard();
@@ -487,7 +508,7 @@
     setText(rec, t.record);
     var bt = bestMs ? fmt(bestMs) : '';
     var sb = saveInfo && typeof saveInfo.best === 'number' ? saveInfo.best : null;
-    if (sb !== null && (!bestMs || sb < Math.round(bestMs / 1000))) bt = fmtSec(sb);
+    if (sb !== null && Math.round(bestMs / 1000) !== sb) bt = fmtSec(sb);
     setText($('endBest'), bt ? t.best + ' ' + bt : '');
     var ol = $('endSplits');
     ol.textContent = '';
@@ -609,8 +630,10 @@
     cv.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     cv.addEventListener('animationend', function () { cv.classList.remove('shake'); });
-    doc.addEventListener('pointerdown', audio, true);
-    doc.addEventListener('visibilitychange', function () { skipDt = true; });
+    ['pointerdown', 'pointerup', 'touchend', 'click'].forEach(function (n) { doc.addEventListener(n, audio, true); });
+    cv.addEventListener('lostpointercapture', onCancel);
+    root.addEventListener('blur', function () { drag = null; preview = null; });
+    doc.addEventListener('visibilitychange', function () { skipDt = true; drag = null; preview = null; });
     TOOLS.forEach(function (n) {
       var b = $('tool-' + n);
       b.addEventListener('click', function () { if (!drag) setTool(n); });
@@ -662,7 +685,7 @@
     applyHost();
     r.resize();
     restartRun();
-    if (String(root.location.search).indexOf('test') !== -1) installTest();
+    if (/[?&]test=1(&|$)/.test(String(root.location.search)) && root.__UBT_TEST === true) installTest();
     root.requestAnimationFrame(frame);
   }
   function adopt() {
