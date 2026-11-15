@@ -13,11 +13,23 @@ OUT.mkdir(parents=True, exist_ok=True)
 STUB = (ROOT / 'tools' / 'stub-usion.js').read_text()
 
 WORST = """() => {
-  const c = UBT.city(), z = UBT.challenge().spot;
+  const c = UBT.city();
   let best = -1;
-  for (let n = 0; n < c.nodeCount; n++) if (c.signal[n] && Math.hypot(c.nx[n] - z.x, c.ny[n] - z.y) <= z.r && (best < 0 || c._jam[n] > c._jam[best])) best = n;
+  for (let n = 0; n < c.nodeCount; n++) if (Sim.isJunction(c, n) && (best < 0 || c._jam[n] > c._jam[best])) best = n;
   return best;
 }"""
+
+OTHER = """(skip) => {
+  const c = UBT.city(), z = UBT.challenge().spot, cv = document.getElementById('cv').getBoundingClientRect();
+  for (let n = 0; n < c.nodeCount; n++) {
+    if (n === skip || !Sim.isJunction(c, n) || Math.hypot(c.nx[n] - z.x, c.ny[n] - z.y) > z.r * 0.7) continue;
+    const p = UBT.screenOf(c.nx[n], c.ny[n]);
+    if (p.x > cv.left + 40 && p.x < cv.right - 40 && p.y > cv.top + 140 && p.y < cv.bottom - 40) return {n: n, x: p.x, y: p.y};
+  }
+  return null;
+}"""
+
+TOOLS = ['overpass', 'roundabout', 'lights', 'widen', 'road']
 
 CORNER_LUM = """() => {
   const cv = document.getElementById('cv');
@@ -67,10 +79,42 @@ def run(base, stub, viewport, name):
         assert '→' in pg.text_content('#jamTxt')
         pg.screenshot(path=str(OUT / (name + '-play.png')))
 
-        res = pg.evaluate('() => { UBT.start(0); const n = (' + WORST + ')(); return Object.assign({node: n}, UBT.act({type: "overpass", node: n})); }')
-        assert res['node'] >= 0 and res['ok'] and pg.evaluate('UBT.city().budget') == 150 - res['cost'], res
-        assert pg.evaluate('UBT.finishNow()') == 'clear'
-        assert not pg.is_hidden('#banner')
+        for k in TOOLS:
+            pg.click('#tool-' + k)
+            assert pg.get_attribute('#tool-' + k, 'aria-pressed') == 'true', k
+            assert pg.is_visible('#hint'), k
+            pg.click('#tool-' + k)
+            assert pg.get_attribute('#tool-' + k, 'aria-pressed') == 'false', k
+        assert '60' in pg.text_content('#tool-oddeven')
+
+        node = pg.evaluate("() => { UBT.start(0); document.getElementById('pause').click(); return (" + WORST + ")(); }")
+        assert node >= 0 and pg.get_attribute('#pause', 'aria-pressed') == 'true'
+        pg.wait_for_timeout(1400)
+        pg.click('#tool-roundabout')
+        pt = pg.evaluate('n => UBT.screenOf(UBT.city().nx[n], UBT.city().ny[n])', node)
+        pg.mouse.click(pt['x'], pt['y'])
+        pg.wait_for_function('n => UBT.city().roundabout[n] === 1', arg=node, timeout=3000)
+        assert pg.evaluate('UBT.city().budget') == 150 - pg.evaluate('Sim.COSTS.roundabout')
+        assert pg.get_attribute('#tool-roundabout', 'aria-pressed') == 'false'
+        pg.wait_for_timeout(400)
+        other = pg.evaluate('(' + OTHER + ')(%d)' % node)
+        assert other, 'a free junction on screen'
+        pg.mouse.click(other['x'], other['y'])
+        pg.wait_for_selector('#card:not([hidden])', timeout=3000)
+        labels = pg.evaluate("[...document.querySelectorAll('#cardActs button span')].map(e => e.textContent)")
+        assert labels == ['Гүүрэн гарц', 'Тойрог', 'Гэрлэн дохио', 'Эгнээ нэмэх'], labels
+        pg.screenshot(path=str(OUT / (name + '-card.png')))
+        pg.keyboard.press('Escape')
+
+        assert pg.evaluate('UBT.finishNow()') == 'play'
+        assert pg.evaluate('UBT.challenge().cleared') and pg.is_visible('#finishBtn') and pg.is_visible('#banner')
+        assert pg.text_content('#clock').startswith('✓') and 'won' in pg.get_attribute('#clock', 'class')
+        t0 = pg.evaluate('UBT.city().time')
+        pg.click('#pause')
+        pg.wait_for_function('t => UBT.city().time > t + 20', arg=t0, timeout=5000)
+        assert pg.evaluate('UBT.state()') == 'play' and pg.is_hidden('#end')
+        pg.screenshot(path=str(OUT / (name + '-cleared.png')))
+        pg.click('#finishBtn')
         wait_end(pg, 'clear')
         ch = pg.evaluate('({t: UBT.challenge().time, par: UBT.challenge().spot.par})')
         stars = 3 if ch['t'] <= ch['par'][0] else 2 if ch['t'] <= ch['par'][1] else 1
@@ -119,6 +163,10 @@ def run(base, stub, viewport, name):
         pg.click('#nextBtn')
         pg.wait_for_function("UBT.state() === 'play'", timeout=5000)
         assert spot_id(pg) == 'chuluun'
+        pg.click('#tool-oddeven')
+        pg.wait_for_function('UBT.city().oddEven === true', timeout=3000)
+        assert pg.is_disabled('#tool-oddeven') and '✓' in pg.text_content('#tool-oddeven')
+        assert pg.evaluate('UBT.city().budget') == 150 - pg.evaluate('Sim.COSTS.oddeven')
 
         pg.click('#mapBtn')
         assert pg.evaluate('UBT.state()') == 'list'

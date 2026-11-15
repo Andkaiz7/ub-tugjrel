@@ -1122,6 +1122,55 @@
       }
     }
 
+    function drawRoundabouts(city, camX, camY, scale, halfW, halfH) {
+      var ra = city && city.roundabout;
+      if (!ra || !city.nx) return;
+      var rad = Math.max(6, 28 * scale);
+      ctx.save();
+      for (var n = 0; n < city.nodeCount; n++) {
+        if (!ra[n]) continue;
+        var sx = (city.nx[n] - camX) * scale + halfW;
+        var sy = (city.ny[n] - camY) * scale + halfH;
+        if (sx < -30 || sx > cssW + 30 || sy < -30 || sy > cssH + 30) continue;
+        ctx.beginPath();
+        ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(3, rad * 0.55);
+        ctx.strokeStyle = '#475569';
+        ctx.stroke();
+        ctx.fillStyle = '#4ade80';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawTargets(city, targets, camX, camY, scale, halfW, halfH, now) {
+      if (!targets || !targets.length || !city || !city.nx) return;
+      var pulse = 0.5 + 0.5 * Math.sin(now * 0.008);
+      var rad = 8 + pulse * 3;
+      ctx.save();
+      for (var i = 0; i < targets.length; i++) {
+        var n = targets[i];
+        if (n < 0 || n >= city.nodeCount) continue;
+        var sx = (city.nx[n] - camX) * scale + halfW;
+        var sy = (city.ny[n] - camY) * scale + halfH;
+        if (sx < -20 || sx > cssW + 20 || sy < -20 || sy > cssH + 20) continue;
+        ctx.beginPath();
+        ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.3)';
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.85)';
+        ctx.stroke();
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = '#facc15';
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     function drawArea(area, lang, camX, camY, scale, halfW, halfH, now) {
       if (!area || !(area.r > 0)) return;
       var sx = (area.x - camX) * scale + halfW;
@@ -1220,10 +1269,12 @@
       drawRoads(city, sim, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawLandmarks(scen, artPlaces, camX, camY, scale, halfW, halfH, now);
       drawJunctionUpgrades(city, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
+      drawRoundabouts(city, camX, camY, scale, halfW, halfH);
       drawCars(city, sim, artThings, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawZones(scen, artThings, camX, camY, scale, halfW, halfH, lang);
       drawPlaces(map, camX, camY, scale, halfW, halfH, lang);
       drawArea(v.area, lang, camX, camY, scale, halfW, halfH, now);
+      drawTargets(city, v.targets, camX, camY, scale, halfW, halfH, now);
       drawHotspots(city, v.hot, camX, camY, scale, halfW, halfH, now);
       drawSelectionAndPending(city, v, sim, camX, camY, scale, halfW, halfH, now);
       drawEffects(camX, camY, scale, halfW, halfH, now);

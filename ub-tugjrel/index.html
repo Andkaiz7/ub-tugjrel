@@ -19,14 +19,14 @@ svg{display:block}
 #hud{grid-area:hud;display:flex;flex-direction:column;gap:6px;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
 .h1,.h2{display:flex;align-items:center;gap:6px;min-width:0}
 .sn{flex:1;min-width:0;font:900 16px/1.15 system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.clock{flex:0 0 auto;min-width:68px;padding:8px 10px;border-radius:12px;background:#1e293b;color:#fde047;font:800 19px/1 ui-rounded,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.35)}
+.clock{flex:0 0 auto;min-width:68px;padding:8px 10px;border-radius:12px;background:#1e293b;color:#fde047;font:800 19px/1 ui-rounded,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;box-shadow:inset 0 -3px 0 rgba(0,0,0,.35)}
+.clock.won{background:#16a34a;color:#fff;box-shadow:inset 0 -3px 0 #14532d}
+.fin{flex:0 0 auto;min-height:44px;padding:0 14px;border-radius:14px;background:#22c55e;color:#052e16;font:900 16px/1 system-ui,sans-serif;box-shadow:0 4px 0 #15803d;animation:pop .3s ease-out}
+.fin:active{transform:translateY(2px);box-shadow:0 2px 0 #15803d}
+#hotBtn{font-size:20px}
 .jam{flex:1;min-width:0;min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:5px 10px;border-radius:14px;background:var(--chip);box-shadow:0 3px 0 var(--chipd)}
 .jt{display:flex;align-items:center;justify-content:space-between;gap:6px;font:900 15px/1 system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap;color:#dc2626}
 .jam.ok .jt{color:#16a34a}
-.ring{flex:0 0 auto;width:20px;height:20px;transform:rotate(-90deg)}
-.ring circle{fill:none;stroke-width:5}
-.ring .rt{stroke:var(--line)}
-.ring .ra{stroke:#16a34a;stroke-linecap:round;stroke-dasharray:94.25;transition:stroke-dashoffset .25s}
 .jb{position:relative;height:8px;border-radius:4px;background:var(--line)}
 .jb i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:4px;background:linear-gradient(90deg,#f97316,#dc2626);transition:width .25s}
 .jam.ok .jb i{background:#22c55e}
@@ -63,19 +63,27 @@ svg{display:block}
 .act:disabled{background:var(--chip);color:var(--muted);box-shadow:none}
 .a-overpass{--c:#8b5cf6;--d:#5b21b6}
 .a-lights{--c:#16a34a;--d:#14532d}
+.a-roundabout{--c:#0891b2;--d:#155e75}
 .a-widen{--c:#2563eb;--d:#1e3a8a}
 .a-road{--c:#16a34a;--d:#14532d}
 .a-cancel{--c:var(--chip);--d:var(--chipd);color:var(--ink);justify-content:center}
-#bar{grid-area:bar;display:flex;gap:8px;padding:8px 10px 10px;background:var(--panel);border-top:1px solid var(--line)}
-.tb{flex:1 1 0;min-width:0;min-height:56px;padding:6px 8px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:var(--c);color:#fff;font:800 14px/1.1 system-ui,sans-serif;text-align:center;box-shadow:0 4px 0 var(--d);transition:transform .12s,background .12s,color .12s}
-.tb svg{width:24px;height:24px}
-.tb:active:not(:disabled){transform:translateY(2px);box-shadow:0 2px 0 var(--d)}
-.tb:disabled{filter:grayscale(.85);opacity:.5;box-shadow:none}
-.t-road{--c:#4f46e5;--d:#3730a3}
-.t-road[aria-pressed="true"]{background:#facc15;color:#1e1b4b;--d:#a16207}
-.t-odd{--c:#f97316;--d:#9a3412}
-.t-hot{--c:#ef4444;--d:#991b1b;flex:0 0 60px;font-size:24px}
-.cost{padding:3px 8px;border-radius:999px;background:rgba(0,0,0,.2);font-size:12px;font-variant-numeric:tabular-nums}
+#bar{grid-area:bar;display:flex;gap:6px;padding:8px 8px 10px;background:var(--panel);border-top:1px solid var(--line)}
+#bar{overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;touch-action:pan-x;scrollbar-width:none}
+#bar::-webkit-scrollbar{display:none}
+.tool{flex:1 0 56px;min-width:56px;min-height:64px;padding:5px 3px 6px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:3px;background:var(--c);color:#fff;font:800 11px/1.05 system-ui,sans-serif;text-align:center;box-shadow:0 4px 0 var(--d);transition:transform .12s,background .12s,color .12s}
+.tool i{font-style:normal;font-size:20px;line-height:1}
+.tool span{display:flex;align-items:center;min-height:2.1em}
+.tool:active:not(:disabled){transform:translateY(2px);box-shadow:0 2px 0 var(--d)}
+.tool:disabled{filter:grayscale(.85);opacity:.5;box-shadow:none}
+.tool[aria-pressed="true"]{background:#facc15;color:#1e1b4b;--d:#a16207;transform:translateY(-3px)}
+.tool.poor .cost{background:#7f1d1d;color:#fecaca}
+.k-overpass{--c:#8b5cf6;--d:#5b21b6}
+.k-roundabout{--c:#0891b2;--d:#155e75}
+.k-lights{--c:#16a34a;--d:#14532d}
+.k-widen{--c:#2563eb;--d:#1e3a8a}
+.k-road{--c:#4f46e5;--d:#3730a3}
+.k-oddeven{--c:#f97316;--d:#9a3412}
+.cost{padding:2px 6px;border-radius:999px;background:rgba(0,0,0,.22);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .ovl{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:var(--scrim)}
 #list{z-index:20}
 .panel{width:100%;max-width:420px;max-height:100%;display:flex;flex-direction:column;background:var(--panel);border-radius:24px;box-shadow:0 12px 40px rgba(0,0,0,.3);overflow:hidden;animation:pop .3s ease-out}
@@ -139,14 +147,14 @@ svg{display:block}
 #app{grid-template-rows:minmax(0,1fr);grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"hud stage bar"}
 #hud{width:156px;padding:8px;border-bottom:0;border-right:1px solid var(--line);overflow:auto}
 .h1{flex-wrap:wrap}
+.h1 .clock{order:2;flex:1 0 100%}
 .h1 .sn{order:3;flex:1 0 100%;white-space:normal;font-size:14px}
-.h1 .clock{flex:1}
+.h1 .fin{order:4;flex:1 0 100%}
 .h2{flex:1;flex-direction:column;align-items:stretch}
 .jam{flex:0 0 auto}
 .ctl{margin-top:auto;justify-content:center}
-#bar{flex-direction:column;justify-content:center;width:104px;padding:8px;border-top:0;border-left:1px solid var(--line)}
-.tb{flex:0 0 auto;min-height:72px}
-.t-hot{flex:0 0 auto;min-height:56px}
+#bar{flex-direction:column;width:88px;padding:8px 8px 10px;border-top:0;border-left:1px solid var(--line);overflow-x:hidden;overflow-y:auto;touch-action:pan-y}
+.tool{flex:0 0 auto;min-height:66px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -156,12 +164,14 @@ svg{display:block}
 <header id="hud">
 <div class="h1">
 <button id="mapBtn" class="ib" type="button" data-ta="spots">🗺</button>
+<button id="hotBtn" class="ib" type="button" data-ta="hot">🔥</button>
 <div id="spotName" class="sn"></div>
 <div id="clock" class="clock" role="timer">0:00</div>
+<button id="finishBtn" class="fin" type="button" data-t="finish" hidden></button>
 </div>
 <div class="h2">
 <div id="jam" class="jam" role="img">
-<div class="jt"><span id="jamTxt"></span><svg id="ring" class="ring" viewBox="0 0 36 36" aria-hidden="true" focusable="false" hidden><circle class="rt" cx="18" cy="18" r="15"/><circle id="ringArc" class="ra" cx="18" cy="18" r="15"/></svg></div>
+<div class="jt"><span id="jamTxt"></span></div>
 <div class="jb"><i id="jamFill"></i><b id="jamGoal"></b></div>
 </div>
 <span id="bud" class="stat bud" role="img"></span>
@@ -182,9 +192,12 @@ svg{display:block}
 </div>
 </div>
 <nav id="bar">
-<button id="roadBtn" class="tb t-road" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3 4 21M16 3l4 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M12 4v3M12 10.5v3M12 17v3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span data-t="road"></span></button>
-<button id="oddBtn" class="tb t-odd" type="button"><span data-t="oddeven"></span><b id="oddCost" class="cost"></b></button>
-<button id="hotBtn" class="tb t-hot" type="button" data-ta="hot">🔥</button>
+<button id="tool-overpass" class="tool k-overpass" type="button" aria-pressed="false"><i aria-hidden="true">🌉</i><span data-t="overpass"></span><b class="cost"></b></button>
+<button id="tool-roundabout" class="tool k-roundabout" type="button" aria-pressed="false"><i aria-hidden="true">⭕</i><span data-t="roundabout"></span><b class="cost"></b></button>
+<button id="tool-lights" class="tool k-lights" type="button" aria-pressed="false"><i aria-hidden="true">🚦</i><span data-t="lights"></span><b class="cost"></b></button>
+<button id="tool-widen" class="tool k-widen" type="button" aria-pressed="false"><i aria-hidden="true">↔️</i><span data-t="widen"></span><b class="cost"></b></button>
+<button id="tool-road" class="tool k-road" type="button" aria-pressed="false"><i aria-hidden="true">🛣️</i><span data-t="road"></span><b class="cost"></b></button>
+<button id="tool-oddeven" class="tool k-oddeven" type="button"><i aria-hidden="true">🔢</i><span data-t="oddeven"></span><b class="cost"></b></button>
 </nav>
 </div>
 <div id="end" class="ovl" role="dialog" aria-modal="true" aria-labelledby="endHead" hidden>

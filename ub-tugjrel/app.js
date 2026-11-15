@@ -6,17 +6,18 @@
       budL: 'Төсөв', unit: 'тэрбум₮', jamL: 'Түгжрэл',
       speed: 'Хурд', pause: 'Түр зогсоох', resume: 'Үргэлжлүүлэх',
       road: 'Шинэ зам', oddeven: 'Тэгш-сондгой', hot: 'Дараагийн түгжрэл',
-      overpass: 'Гүүрэн гарц', lights: 'Гэрлэн дохио', widen: 'Эгнээ нэмэх',
+      overpass: 'Гүүрэн гарц', roundabout: 'Тойрог', lights: 'Гэрлэн дохио', widen: 'Эгнээ нэмэх',
       build: 'Барих', cancel: 'Болих', junction: 'Уулзвар', unnamed: 'Нэргүй зам', km: 'км',
       pickA: 'Эхлэх цэгээ сонго', pickB: 'Төгсөх цэгээ сонго', noJam: 'Түгжрэл алга',
-      goal: function (n) { return '🚗 ' + n + ' хүртэл бууруулж 2 минут барь'; },
+      pickNode: 'Уулзвар дээр дар', pickEdge: 'Зам дээр дар', finish: 'Дуусгах',
+      goal: function (n) { return 'Түгжрэлийг 🚗 ' + n + ' хүртэл бууруул'; },
       done: {
-        overpass: 'Гүүрэн гарц баригдлаа', lights: 'Гэрлэн дохио тавигдлаа', widen: 'Эгнээ нэмэгдлээ',
+        overpass: 'Гүүрэн гарц баригдлаа', roundabout: 'Тойрог баригдлаа', lights: 'Гэрлэн дохио тавигдлаа', widen: 'Эгнээ нэмэгдлээ',
         road: 'Шинэ зам баригдлаа', oddeven: 'Тэгш-сондгой эхэллээ'
       },
       why: {
         budget: 'Төсөв хүрэлцэхгүй', notJunction: 'Уулзвар биш', already: 'Аль хэдийн бий',
-        maxLanes: 'Эгнээ дүүрсэн', tooLong: 'Хэт урт', same: 'Ижил цэг', exists: 'Зам бий'
+        maxLanes: 'Эгнээ дүүрсэн', tooLong: 'Хэт урт', same: 'Ижил цэг', exists: 'Зам бий', outside: 'Бүсээс гадна'
       },
       nope: 'Болохгүй',
       cleared: 'Түгжрэл арилсан!', timeUp: 'Цаг дууслаа',
@@ -34,17 +35,18 @@
       budL: 'Budget', unit: 'bn₮', jamL: 'Jam',
       speed: 'Speed', pause: 'Pause', resume: 'Resume',
       road: 'New road', oddeven: 'Odd-even', hot: 'Next jam',
-      overpass: 'Overpass', lights: 'Smart lights', widen: 'Add lane',
+      overpass: 'Overpass', roundabout: 'Roundabout', lights: 'Smart lights', widen: 'Add lane',
       build: 'Build', cancel: 'Cancel', junction: 'Junction', unnamed: 'Unnamed road', km: 'km',
       pickA: 'Tap the start point', pickB: 'Tap the end point', noJam: 'No jams',
-      goal: function (n) { return 'Cut the jam to 🚗 ' + n + ' and hold 2 min'; },
+      pickNode: 'Tap a junction', pickEdge: 'Tap a road', finish: 'Finish',
+      goal: function (n) { return 'Cut the jam to 🚗 ' + n; },
       done: {
-        overpass: 'Overpass built', lights: 'Lights installed', widen: 'Lane added',
+        overpass: 'Overpass built', roundabout: 'Roundabout built', lights: 'Lights installed', widen: 'Lane added',
         road: 'Road built', oddeven: 'Odd-even on'
       },
       why: {
         budget: 'Not enough budget', notJunction: 'Not a junction', already: 'Already built',
-        maxLanes: 'Max lanes', tooLong: 'Too long', same: 'Same point', exists: 'Road exists'
+        maxLanes: 'Max lanes', tooLong: 'Too long', same: 'Same point', exists: 'Road exists', outside: 'Outside the area'
       },
       nope: 'Not possible',
       cleared: 'Jam cleared!', timeUp: "Time's up",
@@ -70,7 +72,9 @@
   var FRIENDS_TTL = 60000;
   var KEY_PROG = 'spots3';
   var KEY_PEND = 'pending3';
-  var RING = 94.25;
+  var TOOLS = ['overpass', 'roundabout', 'lights', 'widen', 'road', 'oddeven'];
+  var JUNCTION = { overpass: 1, roundabout: 1, lights: 1 };
+  var ICONS = { overpass: '🌉', roundabout: '⭕', lights: '🚦', widen: '↔️', road: '🛣️' };
 
   var doc = root.document;
   var S, r, cv, stage, card;
@@ -103,10 +107,10 @@
   var hotIdx = -1;
   var hotTop = -1;
   var jamAt = -1e9;
-  var mode = '';
+  var tool = '';
   var road = null;
   var sel = null;
-  var view = { now: 0, lang: 'mn', selection: null, pending: null, hot: [], area: null };
+  var view = { now: 0, lang: 'mn', selection: null, pending: null, hot: [], area: null, targets: null };
   var ptrs = {};
   var gest = null;
   var lastTap = null;
@@ -292,7 +296,7 @@
     setSpeed(speed);
     setPause(paused);
     if (city) {
-      setMode('');
+      setTool('');
       tick();
       updateHud();
     }
@@ -300,23 +304,18 @@
     renderList();
   }
 
-  function elapsed() {
-    if (ch.cleared) return ch.time;
-    return (ch.below >= 0 ? ch.below : city.time) - ch.start;
-  }
   function updateHud() {
     var box = $('jam');
-    var ok = ch.cleared || ch.below >= 0;
-    var p = ch.cleared ? 1 : ch.below >= 0 ? clamp((city.time - ch.below) / S.HOLD, 0, 1) : -1;
-    var ring = $('ring');
+    var clk = $('clock');
+    var won = !!(run && run.won);
+    var ok = (Number(ch.smooth) || 0) <= ch.target;
     setText($('spotName'), spotName(spot));
-    setText($('clock'), fmtT(elapsed()));
+    setText(clk, won ? '✓ ' + fmtT(run.time) : fmtT(city.time - ch.start));
+    if (clk.classList.contains('won') !== won) clk.classList.toggle('won', won);
     setText($('jamTxt'), '🚗 ' + Math.round((Number(ch.smooth) || 0) / 10) * 10 + ' → ' + ch.target);
     if (box.classList.contains('ok') !== ok) box.classList.toggle('ok', ok);
     $('jamFill').style.width = (clamp((Number(ch.smooth) || 0) / jam0, 0, 1) * 100).toFixed(1) + '%';
     $('jamGoal').style.left = (clamp(ch.target / jam0, 0, 1) * 100).toFixed(1) + '%';
-    ring.toggleAttribute('hidden', p < 0);
-    if (p >= 0) $('ringArc').style.strokeDashoffset = (RING * (1 - p)).toFixed(1);
     setText($('bud'), '💰 ' + fmtCost(city.budget));
   }
   function tick() {
@@ -325,14 +324,29 @@
     setAttr($('jam'), 'aria-label', t.jamL + ' ' + Math.round(Number(ch.smooth) || 0) + ' → ' + ch.target);
     setAttr($('bud'), 'aria-label', t.budL + ' ' + fmtCost(city.budget) + ' ' + t.unit);
   }
+  function toolCost(k) {
+    var C = S.COSTS || {};
+    return k === 'widen' ? C.widenPerKm : k === 'road' ? C.roadPerKm : C[k];
+  }
   function refreshCtl() {
-    var b = $('oddBtn');
-    var used = !!city.oddEven;
-    var q = S.quote(city, { type: 'oddeven' }) || {};
-    var s = used ? '✓' : '💰' + fmtCost(q.cost);
-    b.disabled = used || q.ok !== true || phase !== 'play';
-    setText($('oddCost'), s);
-    setAttr(b, 'aria-label', t.oddeven + ', ' + (used || q.ok ? s : why(q)));
+    TOOLS.forEach(function (k) {
+      var b = $('tool-' + k);
+      var cost = toolCost(k);
+      var perKm = k === 'widen' || k === 'road';
+      var s = fmtCost(cost) + (perKm ? '/' + t.km : '');
+      var off = phase !== 'play';
+      var label = s;
+      if (k === 'oddeven') {
+        var q = S.quote(city, { type: 'oddeven' }) || {};
+        if (city.oddEven) s = label = '✓';
+        else if (q.ok !== true) label = why(q);
+        off = off || !!city.oddEven || q.ok !== true;
+      }
+      b.disabled = off;
+      setText(b.querySelector('.cost'), s);
+      b.classList.toggle('poor', !off && typeof cost === 'number' && city.budget < cost);
+      setAttr(b, 'aria-label', t[k] + ', ' + label);
+    });
   }
   function setSpeed(v) {
     speed = v;
@@ -349,7 +363,11 @@
   }
   function hint() {
     var h = $('hint');
-    var s = mode === 'road' && road.b < 0 ? (road.a < 0 ? t.pickA : t.pickB) : '';
+    var s = '';
+    if (tool === 'road') s = road.b < 0 ? (road.a < 0 ? t.pickA : t.pickB) : '';
+    else if (JUNCTION[tool]) s = t.pickNode;
+    else if (tool === 'widen') s = t.pickEdge;
+    if (s) s = ICONS[tool] + ' ' + s;
     h.hidden = !s;
     setText(h, s);
   }
@@ -415,15 +433,40 @@
     var names = root.UBMap && root.UBMap.names;
     return (i >= 0 && names && names[i]) || t.unnamed;
   }
-  function nodeName(n) {
+  function busiestEdge(n, named) {
     var best = -1;
     var bl = -1;
     for (var e = 0; e < city.edgeCount; e++) {
-      if (city.ename[e] < 0 || (city.ea[e] !== n && city.eb[e] !== n)) continue;
+      if ((named && city.ename[e] < 0) || (city.ea[e] !== n && city.eb[e] !== n)) continue;
       var l = Number(S.edgeLoad(city, e)) || 0;
       if (l > bl) { bl = l; best = e; }
     }
-    return best < 0 ? t.junction : edgeName(best);
+    return best;
+  }
+  function nodeName(n) {
+    var e = busiestEdge(n, true);
+    return e < 0 ? t.junction : edgeName(e);
+  }
+  function junctionActs(n) {
+    return [{ type: 'overpass', node: n }, { type: 'roundabout', node: n }, { type: 'lights', node: n }];
+  }
+  function nearJunction(e, x, y) {
+    var best = -1;
+    var bd = Infinity;
+    [city.ea[e], city.eb[e]].forEach(function (n) {
+      var d = Math.hypot(city.nx[n] - x, city.ny[n] - y);
+      if (S.isJunction(city, n) && d < bd) { bd = d; best = n; }
+    });
+    return best;
+  }
+  function targetsFor(type) {
+    var out = [];
+    for (var n = 0; n < city.nodeCount; n++) {
+      if (Math.hypot(city.nx[n] - spot.x, city.ny[n] - spot.y) > spot.r || !S.isJunction(city, n)) continue;
+      var q = S.quote(city, { type: type, node: n }) || {};
+      if (q.ok || q.reason === 'budget') out.push(n);
+    }
+    return out;
   }
   function km(a, b) {
     var d = Math.hypot(city.nx[a] - city.nx[b], city.ny[a] - city.ny[b]) / 1000;
@@ -431,8 +474,8 @@
   }
   function syncView() {
     view.selection = sel && sel.kind !== 'road' ? { type: sel.kind, id: sel.id }
-      : mode === 'road' && road.a >= 0 && road.b < 0 ? { type: 'node', id: road.a } : null;
-    view.pending = mode === 'road' && road.b >= 0 ? { type: 'road', a: road.a, b: road.b, ok: road.ok } : null;
+      : tool === 'road' && road.a >= 0 && road.b < 0 ? { type: 'node', id: road.a } : null;
+    view.pending = tool === 'road' && road.b >= 0 ? { type: 'road', a: road.a, b: road.b, ok: road.ok } : null;
   }
   function actButton(cls, label) {
     var b = doc.createElement('button');
@@ -450,10 +493,14 @@
       x = city.nx[id];
       y = city.ny[id];
       name = nodeName(id);
-      acts = [{ type: 'overpass', node: id }, { type: 'lights', node: id }];
+      acts = junctionActs(id);
+      var be = busiestEdge(id, false);
+      if (be >= 0) acts.push({ type: 'widen', edge: be });
     } else if (kind === 'edge') {
       name = edgeName(id);
       acts = [{ type: 'widen', edge: id }];
+      var j = nearJunction(id, x, y);
+      if (j >= 0) acts = acts.concat(junctionActs(j));
     } else {
       x = city.nx[road.b];
       y = city.ny[road.b];
@@ -476,7 +523,7 @@
     });
     if (kind === 'road') {
       var x2 = actButton('a-cancel', t.cancel);
-      x2.addEventListener('click', function () { setMode(''); });
+      x2.addEventListener('click', function () { setTool(''); });
       box.appendChild(x2);
     }
     card.hidden = false;
@@ -522,12 +569,19 @@
     card.style.left = Math.round(x) + 'px';
     card.style.top = Math.round(y) + 'px';
   }
-  function setMode(m) {
-    mode = m;
-    road = m === 'road' ? { a: -1, b: -1, ok: false } : null;
+  function setTool(k) {
+    tool = k;
+    road = k === 'road' ? { a: -1, b: -1, ok: false } : null;
     closeCard();
-    setAttr($('roadBtn'), 'aria-pressed', String(m === 'road'));
+    TOOLS.forEach(function (n) { if (n !== 'oddeven') setAttr($('tool-' + n), 'aria-pressed', String(n === k)); });
+    view.targets = JUNCTION[k] && city ? targetsFor(k) : null;
     hint();
+  }
+  function onTool(k) {
+    if (phase !== 'play' || !city) return;
+    if (k === 'oddeven') { doAct({ type: 'oddeven' }); return; }
+    blip();
+    setTool(tool === k ? '' : k);
   }
 
   function act(a) {
@@ -549,7 +603,7 @@
   function doAct(a) {
     var res = act(a);
     if (res.ok) {
-      if (mode === 'road') setMode('');
+      if (tool) setTool('');
       else closeCard();
     } else refreshCard();
     return res;
@@ -602,7 +656,7 @@
     if (hidden || !city) return;
     if (phase === 'play' && !paused && !listOpen) {
       acc += dt * S.TIME_SCALE * speed;
-      while (acc >= S.DT && !ch.cleared && !ch.failed) {
+      while (acc >= S.DT && !city.done) {
         S.step(city, S.DT);
         S.updateChallenge(ch, city);
         acc -= S.DT;
@@ -610,7 +664,7 @@
     }
     if (anim) stepAnim(now);
     drain();
-    if (phase === 'play' && (ch.cleared || ch.failed)) endRun();
+    checkRun();
     if (now - hotAt >= 500) updateHot(now);
     if (now - tickAt >= 250) { tickAt = now; tick(); }
     view.now = now;
@@ -692,7 +746,7 @@
     var now = root.performance.now();
     if (lastTap && now - lastTap.t < DOUBLE_MS && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 30) {
       lastTap = null;
-      if (mode !== 'road') closeCard();
+      if (tool !== 'road') closeCard();
       var c = r.getCamera();
       anim = { t0: now, dur: 260, s0: c.scale, s1: c.scale * 2, w: r.screenToWorld(cx, cy), cx: cx, cy: cy };
       return;
@@ -703,7 +757,19 @@
   function pick(cx, cy) {
     var w = r.screenToWorld(cx, cy);
     var s = r.getCamera().scale;
-    if (mode === 'road') { roadPick(w, s); return; }
+    if (tool === 'road') { roadPick(w, s); return; }
+    if (JUNCTION[tool]) {
+      var j = S.nearestNode(city, w.x, w.y, NODE_PX / s, true);
+      if (j < 0) { toast(t.pickNode, 'bad'); honk(); return; }
+      doAct({ type: tool, node: j });
+      return;
+    }
+    if (tool === 'widen') {
+      var we = S.nearestEdge(city, w.x, w.y, EDGE_PX / s);
+      if (we < 0) { toast(t.pickEdge, 'bad'); honk(); return; }
+      doAct({ type: 'widen', edge: we });
+      return;
+    }
     if (sel) { closeCard(); return; }
     var n = S.nearestNode(city, w.x, w.y, NODE_PX / s, true);
     if (n >= 0) { blip(); openCard('node', n); return; }
@@ -745,8 +811,9 @@
     hotTop = -1;
     lastTap = null;
     resetGesture();
-    setMode('');
+    setTool('');
     setPause(false);
+    $('finishBtn').hidden = true;
     $('end').hidden = true;
     $('banner').hidden = true;
     closeList();
@@ -759,36 +826,53 @@
     toast(t.goal(ch.target), '');
   }
 
-  function endRun() {
-    var won = !!ch.cleared;
+  function snapshot() {
+    return { spent: Math.round((Number(city.spent) || 0) * 10) / 10, fixes: fixes, oddEven: !!city.oddEven };
+  }
+  function checkRun() {
+    if (phase !== 'play' || run || !ch) return;
+    if (ch.cleared) onClear();
+    else if (ch.failed) onFail();
+  }
+  function onClear() {
     var prev = rec(spot);
     var tm = Math.round(Number(ch.time) || 0);
     var seq = runSeq;
-    phase = won ? 'clear' : 'fail';
-    setMode('');
-    resetGesture();
-    run = {
-      spot: spot, idx: idx, won: won, time: tm,
-      stars: won ? starsFor(tm, spot.par) : 0,
-      spent: Math.round((Number(city.spent) || 0) * 10) / 10,
-      fixes: fixes, oddEven: !!city.oddEven,
-      isBest: won && (!prev || tm < prev.best)
-    };
+    var st = starsFor(tm, spot.par);
+    run = { spot: spot, idx: idx, won: true, time: tm, stars: st, isBest: !prev || tm < prev.best, snap: snapshot() };
     if (run.isBest) {
-      prog[spot.id] = { best: tm, stars: Math.max(run.stars, prev ? prev.stars : 0) };
+      prog[spot.id] = { best: tm, stars: Math.max(st, prev ? prev.stars : 0) };
       sSet(KEY_PROG, prog);
       shareFriendTime(spot, tm);
       submitTotal();
     }
     tab = 'spot';
+    $('finishBtn').hidden = false;
+    banner(t.cleared + ' ' + fmtT(tm) + ' ' + '⭐'.repeat(st));
+    fanfare();
+    r.effect('built', spot.x, spot.y);
+    setTimeout(function () { if (seq === runSeq) $('banner').hidden = true; }, BANNER_MS);
+  }
+  function onFail() {
+    var seq = runSeq;
+    run = { spot: spot, idx: idx, won: false, time: 0, stars: 0, isBest: false, snap: snapshot() };
+    phase = 'fail';
+    tab = 'spot';
+    setTool('');
+    resetGesture();
     refreshCtl();
-    updateHud();
-    if (won) {
-      banner(t.cleared);
-      fanfare();
-      r.effect('built', spot.x, spot.y);
-    } else honk();
-    setTimeout(function () { if (seq === runSeq && phase !== 'play') showEnd(); }, won ? BANNER_MS : 400);
+    honk();
+    setTimeout(function () { if (seq === runSeq && phase === 'fail') showEnd(); }, 400);
+  }
+  function finish() {
+    if (phase !== 'play' || !run || !run.won) return;
+    phase = 'clear';
+    run.snap = snapshot();
+    $('finishBtn').hidden = true;
+    setTool('');
+    resetGesture();
+    refreshCtl();
+    showEnd();
   }
   function showEnd() {
     $('banner').hidden = true;
@@ -925,9 +1009,9 @@
     setAttr($('endStars'), 'aria-label', run.stars + '/3');
     $('endRec').hidden = !run.isBest;
     setText($('endBest'), !run.isBest && b ? t.best + ' ' + fmtT(b.best) : '');
-    setText($('fFix'), String(run.fixes));
-    setText($('fSpent'), '💰' + fmtCost(run.spent));
-    setText($('fOdd'), run.oddEven ? '✓' : '—');
+    setText($('fFix'), String(run.snap.fixes));
+    setText($('fSpent'), '💰' + fmtCost(run.snap.spent));
+    setText($('fOdd'), run.snap.oddEven ? '✓' : '—');
     $('saveRow').hidden = !current;
     var txt = { saving: t.saving, saved: t.saved, failed: t.failed, guest: t.guest }[saveState] || '';
     if (saveState === 'saved' && saveInfo && saveInfo.rank) txt += ' · #' + saveInfo.rank;
@@ -1133,13 +1217,13 @@
     doc.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (listOpen) closeList();
-      else if (mode) setMode('');
+      else if (tool) setTool('');
       else closeCard();
     });
     $('speed').addEventListener('click', function () { setSpeed(speed === 1 ? 3 : 1); });
     $('pause').addEventListener('click', function () { setPause(!paused); });
-    $('roadBtn').addEventListener('click', function () { if (phase === 'play' && city) setMode(mode === 'road' ? '' : 'road'); });
-    $('oddBtn').addEventListener('click', function () { doAct({ type: 'oddeven' }); });
+    TOOLS.forEach(function (k) { $('tool-' + k).addEventListener('click', function () { onTool(k); }); });
+    $('finishBtn').addEventListener('click', finish);
     $('hotBtn').addEventListener('click', function () { if (city) nextHot(); });
     $('mapBtn').addEventListener('click', openList);
     $('endMap').addEventListener('click', openList);
@@ -1170,14 +1254,15 @@
       finishNow: function () {
         if (!ch || phase !== 'play') return phase;
         var guard = Math.ceil((city.end - city.time) / S.DT) + 100;
-        while (!ch.cleared && !ch.failed && guard-- > 0) {
+        while (!ch.cleared && !ch.failed && !city.done && guard-- > 0) {
           S.step(city, S.DT);
           S.updateChallenge(ch, city);
         }
         drain();
-        if (ch.cleared || ch.failed) endRun();
+        checkRun();
         return phase;
       },
+      screenOf: function (x, y) { return r.worldToScreen(x, y); },
       start: function (i) { startSpot(i); return idx; }
     };
   }
