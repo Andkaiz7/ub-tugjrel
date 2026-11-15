@@ -8,6 +8,9 @@
   var NODE_FACTOR_PLAIN = 0.35;
   var NODE_FACTOR_LIGHTS = 0.55;
   var NODE_FACTOR_OVERPASS = 1.5;
+  var NODE_FACTOR_MINOR = 0.6;
+  var LIGHTS_BONUS = 0.2;
+  var ROUNDABOUT_BONUS = 0.45;
   var DEMAND = 2.0;
   var ODD_EVEN_EVERY = 10;
   var HOME_RADIUS = 1400;
@@ -18,12 +21,11 @@
   var GIVE_UP = 900;
   var LOST_AFTER = 30;
   var MAX_LANES = 4;
-  var HOLD = 120;
   var LIMIT = 2700;
   var SETTLE = 300;
   var MAX_ROAD = 3000;
   var NEW_EDGES = 48;
-  var COSTS = { overpass: 30, lights: 12, widenPerKm: 12, roadPerKm: 14, bridge: 25, oddeven: 60 };
+  var COSTS = { overpass: 30, roundabout: 18, lights: 12, widenPerKm: 12, roadPerKm: 14, bridge: 25, oddeven: 60 };
 
   function mulberry(seed) {
     var a = seed >>> 0;
@@ -76,6 +78,7 @@
       elen: new Float64Array(cap),
       overpass: new Uint8Array(nodeCount),
       lights: new Uint8Array(nodeCount),
+      roundabout: new Uint8Array(nodeCount),
       oddEven: false,
       hold: 0,
       demandScale: 1,
@@ -226,14 +229,16 @@
     }
     for (var k = 0; k < city.nodeCount; k++) city.signal[k] = city.deg[k] >= 3 && city.signal[k] >= 2 && city.signal[k] < city.deg[k] + 1 && majorCross(city, k) ? 1 : 0;
     for (var n = 0; n < city.nodeCount; n++) {
-      if (!city.signal[n] || outside(city, n)) {
+      var limited = city.focus ? city.deg[n] >= 3 && !outside(city, n) : city.signal[n];
+      if (!limited) {
         city._nrate[n] = Infinity;
         continue;
       }
       var lanes = 0;
       var ins = city._in[n];
       for (var i = 0; i < ins.length; i++) lanes += city.lanes[ins[i] >> 1];
-      var f = city.overpass[n] ? NODE_FACTOR_OVERPASS : city.lights[n] ? NODE_FACTOR_LIGHTS : NODE_FACTOR_PLAIN;
+      var base = city.signal[n] ? NODE_FACTOR_PLAIN : NODE_FACTOR_MINOR;
+      var f = city.overpass[n] ? NODE_FACTOR_OVERPASS : city.roundabout[n] ? Math.min(1, base + ROUNDABOUT_BONUS) : city.lights[n] ? base + LIGHTS_BONUS : base;
       city._nrate[n] = f * lanes * LANE_FLOW / CARS_PER_AGENT;
     }
   }
@@ -558,7 +563,7 @@
 
   function hotspots(city, k) {
     var list = [];
-    for (var n = 0; n < city.nodeCount; n++) if (city.signal[n] && city._jam[n] >= 8) list.push(n);
+    for (var n = 0; n < city.nodeCount; n++) if (isJunction(city, n) && city._jam[n] >= 8) list.push(n);
     list.sort(function (a, b) { return city._jam[b] - city._jam[a] || a - b; });
     return list.slice(0, k);
   }
@@ -567,7 +572,7 @@
     var best = -1;
     var bd = maxDist * maxDist;
     for (var n = 0; n < city.nodeCount; n++) {
-      if (!city.deg[n] || (junctionsOnly && !city.signal[n])) continue;
+      if (!city.deg[n] || (junctionsOnly && !isJunction(city, n))) continue;
       var dx = city.nx[n] - x;
       var dy = city.ny[n] - y;
       var d = dx * dx + dy * dy;
@@ -661,17 +666,24 @@
     return false;
   }
 
+  function isJunction(city, n) {
+    if (!(n >= 0 && n < city.nodeCount)) return false;
+    return city.focus ? city.deg[n] >= 3 && !outside(city, n) : !!city.signal[n];
+  }
+
   function quote(city, action) {
     var cost;
     var t = action && action.type;
-    if (t === 'overpass' || t === 'lights') {
+    if (t === 'overpass' || t === 'lights' || t === 'roundabout') {
       var n = action.node;
-      if (!(n >= 0 && n < city.nodeCount) || !city.signal[n]) return { ok: false, cost: 0, reason: 'notJunction' };
-      if (city.overpass[n] || (t === 'lights' && city.lights[n])) return { ok: false, cost: 0, reason: 'already' };
-      cost = t === 'overpass' ? COSTS.overpass : COSTS.lights;
+      if (n >= 0 && n < city.nodeCount && city.deg[n] >= 3 && city.focus && outside(city, n)) return { ok: false, cost: 0, reason: 'outside' };
+      if (!isJunction(city, n)) return { ok: false, cost: 0, reason: 'notJunction' };
+      if (city.overpass[n] || city.lights[n] || city.roundabout[n]) return { ok: false, cost: 0, reason: 'already' };
+      cost = COSTS[t];
     } else if (t === 'widen') {
       var e = action.edge;
       if (!(e >= 0 && e < city.edgeCount)) return { ok: false, cost: 0, reason: 'same' };
+      if (outside(city, city.ea[e]) && outside(city, city.eb[e])) return { ok: false, cost: 0, reason: 'outside' };
       if (city.lanes[e] >= MAX_LANES) return { ok: false, cost: 0, reason: 'maxLanes' };
       cost = Math.max(4, Math.round(city.elen[e] / 1000 * COSTS.widenPerKm));
     } else if (t === 'road') {
@@ -679,6 +691,7 @@
       var b = action.b;
       if (!(a >= 0 && b >= 0 && a < city.nodeCount && b < city.nodeCount) || a === b) return { ok: false, cost: 0, reason: 'same' };
       if (edgeBetween(city, a, b)) return { ok: false, cost: 0, reason: 'exists' };
+      if (outside(city, a) || outside(city, b)) return { ok: false, cost: 0, reason: 'outside' };
       var len = Math.hypot(city.nx[b] - city.nx[a], city.ny[b] - city.ny[a]);
       if (len > MAX_ROAD || city.edgeCount >= city._cap) return { ok: false, cost: 0, reason: 'tooLong' };
       cost = Math.max(4, Math.round(len / 1000 * COSTS.roadPerKm));
@@ -698,9 +711,8 @@
     if (!q.ok || city.done) return q;
     var x = 0;
     var y = 0;
-    if (action.type === 'overpass' || action.type === 'lights') {
-      if (action.type === 'overpass') city.overpass[action.node] = 1;
-      else city.lights[action.node] = 1;
+    if (action.type === 'overpass' || action.type === 'lights' || action.type === 'roundabout') {
+      city[action.type][action.node] = 1;
       x = city.nx[action.node];
       y = city.ny[action.node];
       refreshNodes(city);
@@ -766,21 +778,16 @@
     city.end = city.time + LIMIT;
     var edges = areaEdges(city, spot.x, spot.y, spot.r);
     var jam = areaJam(city, edges);
-    return { spot: spot, edges: edges, start: city.time, jam: jam, smooth: jam, target: Math.max(20, Math.round(jam * spot.goal / 10) * 10), below: -1, cleared: false, time: 0, failed: false };
+    return { spot: spot, edges: edges, start: city.time, jam: jam, smooth: jam, target: Math.max(20, Math.round(jam * spot.goal / 10) * 10), cleared: false, time: 0, failed: false };
   }
 
   function updateChallenge(ch, city) {
-    if (ch.cleared || ch.failed) return ch;
+    if (ch.failed) return ch;
     ch.jam = areaJam(city, ch.edges);
-    ch.smooth = ch.smooth * 0.95 + ch.jam * 0.05;
-    if (ch.smooth <= ch.target) {
-      if (ch.below < 0) ch.below = city.time;
-      if (city.time - ch.below >= HOLD) {
-        ch.cleared = true;
-        ch.time = ch.below - ch.start;
-      }
-    } else {
-      ch.below = -1;
+    ch.smooth = ch.smooth * 0.98 + ch.jam * 0.02;
+    if (!ch.cleared && ch.smooth <= ch.target) {
+      ch.cleared = true;
+      ch.time = city.time - ch.start;
     }
     if (!ch.cleared && city.done) ch.failed = true;
     return ch;
@@ -801,7 +808,7 @@
     nearestEdge: nearestEdge,
     quote: quote,
     apply: apply,
-    HOLD: HOLD,
+    isJunction: isJunction,
     areaEdges: areaEdges,
     areaJam: areaJam,
     createChallenge: createChallenge,

@@ -155,6 +155,32 @@ tests.challenges = function () {
   });
   assert.strictEqual(again.time, fixed.time, 'deterministic');
   console.log('   ' + z.id + ': nothing fails, one overpass clears in ' + Math.round(fixed.time / 60) + ' min');
+  const c = Sim.createCity(M, S);
+  const ch = Sim.createChallenge(c, z);
+  let minor = -1, out = -1;
+  for (let n = 0; n < c.nodeCount; n++) {
+    const inside = Math.hypot(c.nx[n] - z.x, c.ny[n] - z.y) <= z.r;
+    if (inside && c.deg[n] >= 3 && !c.signal[n] && minor < 0) minor = n;
+    if (!inside && c.deg[n] >= 3 && out < 0) out = n;
+  }
+  assert(minor >= 0 && Sim.isJunction(c, minor), 'minor junction inside the area is fixable');
+  for (const type of ['overpass', 'roundabout', 'lights']) assert(Sim.quote(c, { type, node: minor }).ok, type + ' allowed on minor junction');
+  assert.strictEqual(Sim.quote(c, { type: 'overpass', node: out }).reason, 'outside');
+  assert(Sim.apply(c, { type: 'roundabout', node: minor }).ok && c.roundabout[minor] === 1);
+  assert.strictEqual(Sim.quote(c, { type: 'lights', node: minor }).reason, 'already');
+  const cleared = play(z, (cc) => {
+    for (let n = 0; n < cc.nodeCount; n++) if (Sim.isJunction(cc, n)) Sim.apply(cc, { type: 'roundabout', node: n });
+  });
+  assert(cleared.cleared, 'roundabouts also clear ' + z.id);
+  let keep = Sim.createCity(M, S);
+  const kc = Sim.createChallenge(keep, z);
+  let best = -1;
+  for (let n = 0; n < keep.nodeCount; n++) if (Sim.isJunction(keep, n) && (best < 0 || keep._jam[n] > keep._jam[best])) best = n;
+  Sim.apply(keep, { type: 'overpass', node: best });
+  while (!kc.cleared && !keep.done) { Sim.step(keep, Sim.DT); Sim.updateChallenge(kc, keep); }
+  const t = kc.time;
+  for (let i = 0; i < 300; i++) { Sim.step(keep, Sim.DT); Sim.updateChallenge(kc, keep); }
+  assert(kc.cleared && kc.time === t && !keep.done && keep.time > kc.start + t + 200, 'play continues after clear, time is frozen');
 };
 
 let failed = 0;
