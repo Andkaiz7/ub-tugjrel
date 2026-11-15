@@ -11,7 +11,8 @@
   var STUCK_CLEAR_S = 1.5;
   var LOST_S = 1;
   var PENALTY_S = 10;
-  var JUNCTION_COST = 0.5;
+  var JUNCTION_COST = 1;
+  var JUNCTION_SLOW = 0.5;
   var MAX_MIDDLE = 4;
   var COLOR_SLOTS = 5;
 
@@ -260,6 +261,11 @@
     var added = 0;
     var stop = null;
     var used = usage(world).roads;
+    var local = {};
+    var busyEnd = function (t) {
+      var k = world.kind[t];
+      return (k === K.SRC || k === K.DST) && world._deg[t] + world._ramp[t] + (local[t] || 0) >= 1;
+    };
     for (var k = 1; k < tiles.length; k++) {
       var a = tiles[k - 1];
       var b = tiles[k];
@@ -271,7 +277,10 @@
       var key = edgeKey(a, b);
       if (world.edges.has(key)) continue;
       var extra = (countable(world, a) && !world._pdeg[a] ? 1 : 0) + (countable(world, b) && !world._pdeg[b] ? 1 : 0);
+      if (busyEnd(a) || busyEnd(b)) { stop = 'blocked'; break; }
       if (used + extra > world.budget.roads) { stop = 'budget'; break; }
+      local[a] = (local[a] || 0) + 1;
+      local[b] = (local[b] || 0) + 1;
       world.edges.set(key, { a: Math.min(a, b), b: Math.max(a, b), prebuilt: false });
       world._pdeg[a]++;
       world._pdeg[b]++;
@@ -306,7 +315,8 @@
     if (middles < 1 || middles > MAX_MIDDLE) return { ok: false, reason: 'length' };
     var endOk = function (t) {
       var k = world.kind[t];
-      return (k === K.GRASS || k === K.SRC || k === K.DST) && !isMiddle(world, t);
+      if (k === K.SRC || k === K.DST) return world._deg[t] + world._ramp[t] === 0;
+      return k === K.GRASS && !isMiddle(world, t);
     };
     if (!endOk(s) || !endOk(e)) return { ok: false, reason: 'end' };
     for (var i = 0; i < world.bridges.length; i++) {
@@ -353,7 +363,7 @@
     var dead = false;
     for (var i = 0; i < world.cars.length; i++) {
       var car = world.cars[i];
-      car.t += speed * dt;
+      car.t += speed * dt * (isJunctionNode(world, car.node) ? JUNCTION_SLOW : 1);
       if (car.t < 1) {
         car.wait = 0;
         continue;

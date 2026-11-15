@@ -25,7 +25,7 @@
         roads: 20,
         bridges: 1,
         quota: [8],
-        interval: 1.5,
+        interval: 1.2,
         speed: 3
       },
       {
@@ -50,8 +50,8 @@
         ],
         roads: 36,
         bridges: 2,
-        quota: [8, 8],
-        interval: 1.6,
+        quota: [10, 10],
+        interval: 1,
         speed: 3
       },
       {
@@ -76,9 +76,9 @@
         ],
         roads: 28,
         bridges: 2,
-        quota: [7, 7, 7],
-        interval: 1.5,
-        throughInterval: 1.1,
+        quota: [8, 8, 8],
+        interval: 1.2,
+        throughInterval: 1,
         speed: 3
       },
       {
@@ -103,8 +103,8 @@
         ],
         roads: 32,
         bridges: 2,
-        quota: [7, 7, 7],
-        interval: 1.3,
+        quota: [8, 8, 8],
+        interval: 1.4,
         speed: 3
       },
       {
@@ -129,7 +129,7 @@
         ],
         roads: 36,
         bridges: 4,
-        quota: [6, 6, 6, 6],
+        quota: [8, 8, 8, 8],
         interval: 1.5,
         speed: 3
       }

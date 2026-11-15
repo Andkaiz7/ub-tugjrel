@@ -129,6 +129,13 @@ const tests = {
     r = Sim.roadStroke(w, [t(0, 0), t(1, 0)]);
     assert.deepStrictEqual(r, { added: 1, stop: null });
     assert.strictEqual(Sim.usage(w).roads, 3);
+    r = Sim.roadStroke(w, [t(0, 1), t(0, 0)]);
+    assert.deepStrictEqual(r, { added: 0, stop: 'blocked' }, 'source has a single driveway');
+    assert.strictEqual(Sim.bridgeCheck(w, t(0, 0), t(0, 3)).reason, 'end');
+    r = Sim.roadStroke(w, [t(6, 0), t(7, 0), t(8, 0)]);
+    assert.deepStrictEqual(r, { added: 2, stop: null });
+    r = Sim.roadStroke(w, [t(8, 1), t(8, 0)]);
+    assert.deepStrictEqual(r, { added: 0, stop: 'blocked' }, 'destination has a single driveway');
     const small = Sim.createWorld(lv(['A.......a'], { roads: 2 }));
     r = Sim.roadStroke(small, [t(4, 6), t(5, 6), t(6, 6), t(7, 6)]);
     assert.deepStrictEqual(r, { added: 1, stop: 'budget' });
