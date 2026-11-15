@@ -348,7 +348,94 @@
  ],
  "budget": 150,
  "start": 25200,
- "end": 34200
+ "end": 34200,
+ "spots": [
+  {
+   "id": "zaisan",
+   "name": {
+    "mn": "Зайсан",
+    "en": "Zaisan"
+   },
+   "x": 12555,
+   "y": 10863,
+   "r": 1000,
+   "start": 27600,
+   "goal": 0.3,
+   "demand": 0.9,
+   "par": [
+    180,
+    480
+   ]
+  },
+  {
+   "id": "chuluun",
+   "name": {
+    "mn": "Чулуун овооны тойрог",
+    "en": "Chuluun Ovoo"
+   },
+   "x": 16951,
+   "y": 8058,
+   "r": 1000,
+   "start": 27600,
+   "goal": 0.3,
+   "demand": 0.9,
+   "par": [
+    720,
+    1500
+   ]
+  },
+  {
+   "id": "peace",
+   "name": {
+    "mn": "Энхтайваны өргөн чөлөө",
+    "en": "Peace Avenue"
+   },
+   "x": 14375,
+   "y": 7294,
+   "r": 1000,
+   "start": 27600,
+   "goal": 0.3,
+   "demand": 0.7,
+   "par": [
+    1320,
+    2400
+   ]
+  },
+  {
+   "id": "tokyo",
+   "name": {
+    "mn": "Токиогийн гудамж",
+    "en": "Tokyo Street"
+   },
+   "x": 13785,
+   "y": 6794,
+   "r": 1000,
+   "start": 27600,
+   "goal": 0.3,
+   "demand": 0.7,
+   "par": [
+    1680,
+    2700
+   ]
+  },
+  {
+   "id": "naran",
+   "name": {
+    "mn": "Нарны гүүр",
+    "en": "Sun Bridge"
+   },
+   "x": 10827,
+   "y": 8242,
+   "r": 1000,
+   "start": 27600,
+   "goal": 0.3,
+   "demand": 0.6,
+   "par": [
+    2040,
+    3000
+   ]
+  }
+ ]
 };
   if (typeof module !== 'undefined' && module.exports) module.exports = UBScenario;
   else root.UBScenario = UBScenario;

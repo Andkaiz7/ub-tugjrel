@@ -18,6 +18,8 @@
   var GIVE_UP = 900;
   var LOST_AFTER = 30;
   var MAX_LANES = 4;
+  var HOLD = 120;
+  var LIMIT = 3600;
   var MAX_ROAD = 3000;
   var NEW_EDGES = 48;
   var COSTS = { overpass: 30, lights: 12, widenPerKm: 12, roadPerKm: 14, bridge: 25, oddeven: 60 };
@@ -74,6 +76,8 @@
       overpass: new Uint8Array(nodeCount),
       lights: new Uint8Array(nodeCount),
       oddEven: false,
+      hold: 0,
+      focus: null,
       budget: sc.budget,
       spent: 0,
       fixes: 0,
@@ -94,6 +98,7 @@
       _lq: [],
       _lcount: new Int32Array(cap * 2),
       _lslow: new Float64Array(cap * 2),
+      _lstuck: new Int32Array(cap * 2),
       _lstore: new Float64Array(cap * 2),
       _lflow: new Float64Array(cap * 2),
       _ltok: new Float64Array(cap * 2),
@@ -196,13 +201,18 @@
       if (!city._lexists[l]) continue;
       var n = city.lanes[e];
       city._lstore[l] = Math.max(1.5, city.elen[e] * n / (JAM_SPACING * CARS_PER_AGENT));
-      city._lflow[l] = n * LANE_FLOW / CARS_PER_AGENT;
+      city._lflow[l] = outside(city, city.ea[e]) && outside(city, city.eb[e]) ? 10 : n * LANE_FLOW / CARS_PER_AGENT;
       city._lvf[l] = Math.max(4, city.kmh[e] / 3.6);
     }
   }
 
   function linkFrom(city, l) { return (l & 1) ? city.eb[l >> 1] : city.ea[l >> 1]; }
   function linkTo(city, l) { return (l & 1) ? city.ea[l >> 1] : city.eb[l >> 1]; }
+
+  function outside(city, n) {
+    var f = city.focus;
+    return !!f && Math.hypot(city.nx[n] - f.x, city.ny[n] - f.y) > f.r;
+  }
 
   function refreshNodes(city) {
     for (var m = 0; m < city.nodeCount; m++) city.signal[m] = 0;
@@ -214,7 +224,7 @@
     }
     for (var k = 0; k < city.nodeCount; k++) city.signal[k] = city.deg[k] >= 3 && city.signal[k] >= 2 && city.signal[k] < city.deg[k] + 1 && majorCross(city, k) ? 1 : 0;
     for (var n = 0; n < city.nodeCount; n++) {
-      if (!city.signal[n]) {
+      if (!city.signal[n] || outside(city, n)) {
         city._nrate[n] = Infinity;
         continue;
       }
@@ -365,7 +375,10 @@
     var L = city.edgeCount * 2;
     for (var l = 0; l < L; l++) {
       var q = city._lq[l];
-      if (!q.length) continue;
+      if (!q.length) {
+        city._lstuck[l] = 0;
+        continue;
+      }
       var len = city.elen[l >> 1];
       var v = city._lvf[l] * dt;
       var gap = len / city._lstore[l];
@@ -384,6 +397,7 @@
         front = a.s;
       }
       city._lslow[l] = city._lslow[l] * 0.9 + (slow / q.length) * Math.min(1, q.length / 2) * 0.1;
+      city._lstuck[l] = slow;
     }
   }
 
@@ -453,7 +467,7 @@
   }
 
   function spawn(city, dt) {
-    var rate = DEMAND * profile(city.time);
+    var rate = DEMAND * (city.hold ? city.hold : profile(city.time));
     var waiting = 0;
     for (var i = 0; i < city._homes.length; i++) {
       var h = city._homes[i];
@@ -717,6 +731,56 @@
     return q;
   }
 
+  function areaEdges(city, x, y, r) {
+    var list = [];
+    for (var e = 0; e < city.edgeCount; e++) {
+      var p = city.epts[e];
+      for (var i = 0; i < p.length; i += 2) {
+        if (Math.hypot(p[i] - x, p[i + 1] - y) <= r) {
+          list.push(e);
+          break;
+        }
+      }
+    }
+    return list;
+  }
+
+  function areaJam(city, edges) {
+    var stuck = 0;
+    for (var i = 0; i < edges.length; i++) stuck += city._lstuck[edges[i] * 2] + city._lstuck[edges[i] * 2 + 1];
+    return stuck * CARS_PER_AGENT;
+  }
+
+  function createChallenge(city, spot) {
+    while (city.time < spot.start && !city.done) step(city, DT);
+    city.hold = profile(city.time) * (spot.demand || 1);
+    city.end = city.time + LIMIT;
+    city.focus = { x: spot.x, y: spot.y, r: spot.r };
+    for (var e = 0; e < city.edgeCount; e++) setLinkParams(city, e);
+    refreshNodes(city);
+    route(city);
+    var edges = areaEdges(city, spot.x, spot.y, spot.r);
+    var jam = areaJam(city, edges);
+    return { spot: spot, edges: edges, start: city.time, jam: jam, smooth: jam, target: Math.max(20, Math.round(jam * spot.goal / 10) * 10), below: -1, cleared: false, time: 0, failed: false };
+  }
+
+  function updateChallenge(ch, city) {
+    if (ch.cleared || ch.failed) return ch;
+    ch.jam = areaJam(city, ch.edges);
+    ch.smooth = ch.smooth * 0.95 + ch.jam * 0.05;
+    if (ch.smooth <= ch.target) {
+      if (ch.below < 0) ch.below = city.time;
+      if (city.time - ch.below >= HOLD) {
+        ch.cleared = true;
+        ch.time = ch.below - ch.start;
+      }
+    } else {
+      ch.below = -1;
+    }
+    if (!ch.cleared && city.done) ch.failed = true;
+    return ch;
+  }
+
   var Sim = {
     TIME_SCALE: TIME_SCALE,
     DT: DT,
@@ -731,7 +795,12 @@
     nearestNode: nearestNode,
     nearestEdge: nearestEdge,
     quote: quote,
-    apply: apply
+    apply: apply,
+    HOLD: HOLD,
+    areaEdges: areaEdges,
+    areaJam: areaJam,
+    createChallenge: createChallenge,
+    updateChallenge: updateChallenge
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Sim;
   else root.Sim = Sim;

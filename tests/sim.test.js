@@ -129,6 +129,34 @@ const tests = {
   },
 };
 
+tests.challenges = function () {
+  assert.strictEqual(S.spots.length, 5);
+  function play(spot, policy) {
+    const c = Sim.createCity(M, S);
+    const ch = Sim.createChallenge(c, spot);
+    assert(ch.edges.length > 5 && ch.jam > 0 && ch.target >= 20 && c.time === spot.start && c.focus);
+    if (policy) policy(c, ch);
+    while (!c.done && !ch.cleared) { Sim.step(c, Sim.DT); Sim.updateChallenge(ch, c); }
+    return ch;
+  }
+  const z = S.spots[0];
+  const none = play(z);
+  assert(none.failed && !none.cleared, 'doing nothing does not clear ' + z.id);
+  const fixed = play(z, (c) => {
+    let best = -1;
+    for (let n = 0; n < c.nodeCount; n++) if (c.signal[n] && Math.hypot(c.nx[n] - z.x, c.ny[n] - z.y) <= z.r && (best < 0 || c._jam[n] > c._jam[best])) best = n;
+    assert(Sim.apply(c, { type: 'overpass', node: best }).ok);
+  });
+  assert(fixed.cleared && fixed.time > 0 && fixed.time <= z.par[1], 'one overpass clears ' + z.id + ' in ' + fixed.time);
+  const again = play(z, (c) => {
+    let best = -1;
+    for (let n = 0; n < c.nodeCount; n++) if (c.signal[n] && Math.hypot(c.nx[n] - z.x, c.ny[n] - z.y) <= z.r && (best < 0 || c._jam[n] > c._jam[best])) best = n;
+    Sim.apply(c, { type: 'overpass', node: best });
+  });
+  assert.strictEqual(again.time, fixed.time, 'deterministic');
+  console.log('   ' + z.id + ': nothing fails, one overpass clears in ' + Math.round(fixed.time / 60) + ' min');
+};
+
 let failed = 0;
 for (const [name, fn] of Object.entries(tests)) {
   try {
