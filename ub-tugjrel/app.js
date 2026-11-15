@@ -3,12 +3,13 @@
 
   var TXT = {
     mn: {
-      perMin: '/мин', rateL: 'Урсгал', spdL: 'Дундаж хурд', kmh: 'км/ц', budL: 'Төсөв', unit: 'тэрбум₮',
+      budL: 'Төсөв', unit: 'тэрбум₮', jamL: 'Түгжрэл',
       speed: 'Хурд', pause: 'Түр зогсоох', resume: 'Үргэлжлүүлэх',
       road: 'Шинэ зам', oddeven: 'Тэгш-сондгой', hot: 'Дараагийн түгжрэл',
       overpass: 'Гүүрэн гарц', lights: 'Гэрлэн дохио', widen: 'Эгнээ нэмэх',
       build: 'Барих', cancel: 'Болих', junction: 'Уулзвар', unnamed: 'Нэргүй зам', km: 'км',
       pickA: 'Эхлэх цэгээ сонго', pickB: 'Төгсөх цэгээ сонго', noJam: 'Түгжрэл алга',
+      goal: function (n) { return '🚗 ' + n + ' хүртэл бууруулж 2 минут барь'; },
       done: {
         overpass: 'Гүүрэн гарц баригдлаа', lights: 'Гэрлэн дохио тавигдлаа', widen: 'Эгнээ нэмэгдлээ',
         road: 'Шинэ зам баригдлаа', oddeven: 'Тэгш-сондгой эхэллээ'
@@ -18,21 +19,25 @@
         maxLanes: 'Эгнээ дүүрсэн', tooLong: 'Хэт урт', same: 'Ижил цэг', exists: 'Зам бий'
       },
       nope: 'Болохгүй',
-      avg: 'дундаж хурд', fixes: 'Засвар', spent: 'Зарцуулсан',
-      best: 'Шилдэг', record: 'Шинэ рекорд!',
+      cleared: 'Түгжрэл арилсан!', timeUp: 'Цаг дууслаа',
+      fixes: 'Засвар', spent: 'Зарцуулсан', best: 'Шилдэг', newBest: 'Шинэ рекорд!',
       saving: 'Хадгалж байна…', saved: 'Хадгалагдлаа', failed: 'Хадгалагдсангүй',
       guest: 'Нэвтэрч хадгална уу', retry: 'Дахин оролдох',
-      friends: 'Найзууд', global: 'Нийт', loading: 'Ачаалж байна…',
-      empty: 'Рекорд алга байна', error: 'Рекорд ачаалсангүй',
-      again: 'Дахин тоглох'
+      thisSpot: 'Энэ газар', friends: 'Найзууд', global: 'Нийт', me: 'Та',
+      loading: 'Ачаалж байна…', empty: 'Рекорд алга байна', noFriends: 'Найзууд хараахан тоглоогүй',
+      error: 'Рекорд ачаалсангүй',
+      again: 'Дахин', next: 'Дараагийн газар', spots: 'Газрууд', close: 'Хаах', locked: 'Түгжээтэй',
+      share: 'Хуваалцах', shared: 'Хуваалцлаа', shareFail: 'Хуваалцаж чадсангүй',
+      shareText: function (name, tm) { return 'Би «' + name + '»-ийн түгжрэлийг ' + tm + '-д арилгалаа! 🚗💨 Чи үүнээс хурдан чадах уу?'; }
     },
     en: {
-      perMin: '/min', rateL: 'Flow', spdL: 'Average speed', kmh: 'km/h', budL: 'Budget', unit: 'bn₮',
+      budL: 'Budget', unit: 'bn₮', jamL: 'Jam',
       speed: 'Speed', pause: 'Pause', resume: 'Resume',
       road: 'New road', oddeven: 'Odd-even', hot: 'Next jam',
       overpass: 'Overpass', lights: 'Smart lights', widen: 'Add lane',
       build: 'Build', cancel: 'Cancel', junction: 'Junction', unnamed: 'Unnamed road', km: 'km',
       pickA: 'Tap the start point', pickB: 'Tap the end point', noJam: 'No jams',
+      goal: function (n) { return 'Cut the jam to 🚗 ' + n + ' and hold 2 min'; },
       done: {
         overpass: 'Overpass built', lights: 'Lights installed', widen: 'Lane added',
         road: 'Road built', oddeven: 'Odd-even on'
@@ -42,13 +47,16 @@
         maxLanes: 'Max lanes', tooLong: 'Too long', same: 'Same point', exists: 'Road exists'
       },
       nope: 'Not possible',
-      avg: 'average speed', fixes: 'Fixes', spent: 'Spent',
-      best: 'Best', record: 'New record!',
+      cleared: 'Jam cleared!', timeUp: "Time's up",
+      fixes: 'Fixes', spent: 'Spent', best: 'Best', newBest: 'New best!',
       saving: 'Saving…', saved: 'Saved', failed: 'Not saved',
       guest: 'Sign in to save', retry: 'Retry',
-      friends: 'Friends', global: 'Global', loading: 'Loading…',
-      empty: 'No records yet', error: 'Could not load records',
-      again: 'Play again'
+      thisSpot: 'This spot', friends: 'Friends', global: 'Global', me: 'You',
+      loading: 'Loading…', empty: 'No records yet', noFriends: 'No friends have played yet',
+      error: 'Could not load records',
+      again: 'Retry', next: 'Next spot', spots: 'Spots', close: 'Close', locked: 'Locked',
+      share: 'Share', shared: 'Shared', shareFail: 'Could not share',
+      shareText: function (name, tm) { return 'I cleared the «' + name + '» jam in ' + tm + '! 🚗💨 Can you beat that?'; }
     }
   };
   var NODE_PX = 30;
@@ -56,16 +64,33 @@
   var SLOP_PX = 6;
   var DOUBLE_MS = 300;
   var HOT_SCALE = 0.22;
+  var AREA_M = 2400;
+  var NO_TIME = 3600;
+  var BANNER_MS = 1500;
+  var FRIENDS_TTL = 60000;
+  var KEY_PROG = 'spots3';
+  var KEY_PEND = 'pending3';
+  var RING = 94.25;
 
   var doc = root.document;
   var S, r, cv, stage, card;
+  var SP = [];
   var lang = 'mn';
   var t = TXT.mn;
   var userId = null;
   var hostReady = false;
   var started = false;
+  var prog = {};
+  var progSeq = 0;
+  var idx = 0;
+  var spot = null;
   var city = null;
+  var ch = null;
+  var jam0 = 1;
   var phase = 'play';
+  var listOpen = false;
+  var run = null;
+  var runSeq = 0;
   var speed = 1;
   var paused = false;
   var acc = 0;
@@ -73,7 +98,6 @@
   var skipDt = true;
   var tickAt = 0;
   var fixes = 0;
-  var trail = [];
   var hot = [];
   var hotAt = -1e9;
   var hotIdx = -1;
@@ -82,7 +106,7 @@
   var mode = '';
   var road = null;
   var sel = null;
-  var view = { now: 0, lang: 'mn', selection: null, pending: null, hot: [] };
+  var view = { now: 0, lang: 'mn', selection: null, pending: null, hot: [], area: null };
   var ptrs = {};
   var gest = null;
   var lastTap = null;
@@ -91,11 +115,10 @@
   var saving = null;
   var saveState = '';
   var saveInfo = null;
-  var newRecord = false;
-  var bestScore = null;
-  var tab = 'friends';
+  var tab = 'spot';
   var boardSeq = 0;
   var flushing = false;
+  var fcache = {};
   var ac = null;
 
   function $(id) { return doc.getElementById(id); }
@@ -103,11 +126,14 @@
   function setText(el, s) { if (el.textContent !== s) el.textContent = s; }
   function setAttr(el, k, v) { if (el.getAttribute(k) !== v) el.setAttribute(k, v); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function hhmm(sec) {
-    var m = Math.floor((Number(sec) || 0) / 60);
-    return pad(Math.floor(m / 60) % 24) + ':' + pad(m % 60);
+  function fmtT(s) {
+    s = Math.max(0, Math.round(Number(s) || 0));
+    return Math.floor(s / 60) + ':' + pad(s % 60);
   }
-  function kmh(score) { return ((Number(score) || 0) / 10).toFixed(1) + ' ' + t.kmh; }
+  function fmtLong(s) {
+    s = Math.max(0, Math.round(Number(s) || 0));
+    return s >= 3600 ? Math.floor(s / 3600) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60) : fmtT(s);
+  }
   function fmtCost(v) {
     v = Number(v) || 0;
     return String(v >= 10 || v === Math.round(v) ? Math.round(v) : Math.round(v * 10) / 10);
@@ -118,6 +144,31 @@
     el.classList.remove(c);
     void el.offsetWidth;
     el.classList.add(c);
+  }
+  function spotName(p) { return p && p.name ? p.name[lang] || p.name.mn || '' : ''; }
+  function starsFor(s, par) { return s <= par[0] ? 3 : s <= par[1] ? 2 : 1; }
+  function fillStars(el, n) {
+    el.textContent = '';
+    for (var i = 0; i < 3; i++) {
+      var s = doc.createElement('span');
+      s.textContent = '⭐';
+      if (i >= n) s.className = 'off';
+      el.appendChild(s);
+    }
+  }
+  function rec(p) {
+    var v = p && prog[p.id];
+    return v && typeof v.best === 'number' ? v : null;
+  }
+  function isOpen(i) { return i === 0 || !!rec(SP[i - 1]); }
+  function totals() {
+    var s = 0;
+    var n = 0;
+    SP.forEach(function (p) {
+      var v = rec(p);
+      if (v) { s += v.best; n++; } else s += NO_TIME;
+    });
+    return { total: s, cleared: n };
   }
 
   function usion() { return root.Usion; }
@@ -134,6 +185,11 @@
     var u = usion();
     var l = hostReady && u && u.leaderboard;
     return l && typeof l[m] === 'function' ? l : null;
+  }
+  function cloudF(m) {
+    var u = usion();
+    var f = hostReady && u && u.cloud && u.cloud.friends;
+    return f && typeof f[m] === 'function' ? f : null;
   }
   function remote() {
     var u = usion();
@@ -170,6 +226,49 @@
     return Promise.resolve();
   }
 
+  function mergeProg(list) {
+    var o = {};
+    list.forEach(function (p) {
+      if (!p || typeof p !== 'object') return;
+      Object.keys(p).forEach(function (k) {
+        var v = p[k];
+        if (!v || typeof v.best !== 'number' || !(v.best >= 0)) return;
+        var c = o[k];
+        o[k] = { best: c ? Math.min(c.best, v.best) : v.best, stars: Math.max(Number(v.stars) || 0, c ? c.stars : 0) };
+      });
+    });
+    return o;
+  }
+  function loadProg() {
+    var local = lsGet(KEY_PROG);
+    if (!remote()) return Promise.resolve(mergeProg([local]));
+    return timed(attempt(function () { return Usion.storage.get(KEY_PROG); }), 4000).then(function (v) {
+      return mergeProg([local, v]);
+    }, function () { return mergeProg([local]); });
+  }
+  function syncProg() {
+    var seq = ++progSeq;
+    return loadProg().then(function (p) {
+      if (seq !== progSeq) return;
+      prog = p;
+      renderList();
+      if (!city) startSpot(launchSpot());
+      else if (phase !== 'play' && !$('end').hidden) renderEnd();
+    });
+  }
+  function firstSpot() {
+    for (var i = 0; i < SP.length; i++) if (!rec(SP[i])) return i;
+    return 0;
+  }
+  function launchSpot() {
+    var path = '';
+    var u = usion();
+    try { if (hostReady && u && typeof u.getLaunchParams === 'function') path = String((Usion.getLaunchParams() || {}).path || ''); } catch (e) {}
+    var m = /^\/spot\/([A-Za-z0-9_-]+)\/?$/.exec(path);
+    if (m) for (var i = 0; i < SP.length; i++) if (SP[i].id === m[1] && isOpen(i)) return i;
+    return firstSpot();
+  }
+
   function applyHost() {
     var u = usion();
     var lg = '';
@@ -195,36 +294,35 @@
     if (city) {
       setMode('');
       tick();
+      updateHud();
     }
-    if (phase === 'end') renderEnd();
+    if (phase !== 'play' && run) renderEnd();
+    renderList();
   }
 
-  function hudSpeed() {
-    return Number(typeof city.speedNow === 'number' ? city.speedNow : city.speed) || 0;
-  }
-  function trend() {
-    var v = hudSpeed();
-    var last = trail[trail.length - 1];
-    if (!last || city.time !== last.t) trail.push({ t: city.time, v: v });
-    while (trail.length > 1 && trail[1].t <= city.time - 60) trail.shift();
-    var d = city.time - trail[0].t >= 30 ? v - trail[0].v : 0;
-    return d > 0.05 ? 'up' : d < -0.05 ? 'down' : '';
+  function elapsed() {
+    if (ch.cleared) return ch.time;
+    return (ch.below >= 0 ? ch.below : city.time) - ch.start;
   }
   function updateHud() {
-    var tr = trend();
-    var el = $('trend');
-    setText($('clock'), hhmm(city.time));
-    setText($('spd'), kmh(Math.round(hudSpeed() * 10)));
-    setText(el, tr === 'up' ? '▲' : tr === 'down' ? '▼' : '');
-    if (el.className !== tr) el.className = tr;
-    setText($('rate'), '🚗 ' + Math.round(Number(city.rate) || 0) + t.perMin);
+    var box = $('jam');
+    var ok = ch.cleared || ch.below >= 0;
+    var p = ch.cleared ? 1 : ch.below >= 0 ? clamp((city.time - ch.below) / S.HOLD, 0, 1) : -1;
+    var ring = $('ring');
+    setText($('spotName'), spotName(spot));
+    setText($('clock'), fmtT(elapsed()));
+    setText($('jamTxt'), '🚗 ' + Math.round((Number(ch.smooth) || 0) / 10) * 10 + ' → ' + ch.target);
+    if (box.classList.contains('ok') !== ok) box.classList.toggle('ok', ok);
+    $('jamFill').style.width = (clamp((Number(ch.smooth) || 0) / jam0, 0, 1) * 100).toFixed(1) + '%';
+    $('jamGoal').style.left = (clamp(ch.target / jam0, 0, 1) * 100).toFixed(1) + '%';
+    ring.toggleAttribute('hidden', p < 0);
+    if (p >= 0) $('ringArc').style.strokeDashoffset = (RING * (1 - p)).toFixed(1);
     setText($('bud'), '💰 ' + fmtCost(city.budget));
   }
   function tick() {
     refreshCard();
     refreshCtl();
-    setAttr($('rate'), 'aria-label', t.rateL + ' ' + Math.round(Number(city.rate) || 0) + t.perMin);
-    setAttr($('spdBox'), 'aria-label', t.spdL + ' ' + kmh(Math.round(hudSpeed() * 10)));
+    setAttr($('jam'), 'aria-label', t.jamL + ' ' + Math.round(Number(ch.smooth) || 0) + ' → ' + ch.target);
     setAttr($('bud'), 'aria-label', t.budL + ' ' + fmtCost(city.budget) + ' ' + t.unit);
   }
   function refreshCtl() {
@@ -257,12 +355,21 @@
   }
   function toast(s, kind) {
     var box = $('toasts');
+    var b = stage.getBoundingClientRect();
     var el = doc.createElement('div');
+    box.style.top = Math.round(Math.max(8, b.top + 10)) + 'px';
+    box.style.left = Math.round(b.left + 8) + 'px';
+    box.style.right = Math.round(Math.max(8, root.innerWidth - b.right + 8)) + 'px';
     el.className = 'toast ' + (kind || '');
     el.textContent = s;
     box.appendChild(el);
     while (box.children.length > 3) box.removeChild(box.firstChild);
-    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1800);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2200);
+  }
+  function banner(s) {
+    var b = $('banner');
+    setText(b, s);
+    b.hidden = false;
   }
 
   function audio() {
@@ -296,7 +403,12 @@
   function blip() { tone('sine', 880, 0, 0, 0.06, 0.05); }
   function ding() { tone('sine', 1046, 0, 0, 0.12, 0.12); tone('sine', 1568, 0, 0.06, 0.2, 0.08); }
   function honk() { tone('square', 370, 340, 0, 0.24, 0.05); tone('square', 466, 430, 0, 0.24, 0.04); }
-  function fanfare() { tone('triangle', 523, 0, 0, 0.16, 0.1); tone('triangle', 659, 0, 0.12, 0.16, 0.1); tone('triangle', 784, 0, 0.24, 0.3, 0.12); }
+  function fanfare() {
+    tone('triangle', 523, 0, 0, 0.16, 0.1);
+    tone('triangle', 659, 0, 0.12, 0.16, 0.1);
+    tone('triangle', 784, 0, 0.24, 0.16, 0.1);
+    tone('triangle', 1046, 0, 0.36, 0.4, 0.12);
+  }
 
   function edgeName(e) {
     var i = city.ename[e];
@@ -419,7 +531,7 @@
   }
 
   function act(a) {
-    if (phase !== 'play' || !a) return { ok: false, reason: 'over' };
+    if (phase !== 'play' || listOpen || !a) return { ok: false, reason: 'over' };
     var res = S.apply(city, a) || { ok: false };
     if (res.ok) {
       if (a.type !== 'oddeven') fixes++;
@@ -475,7 +587,7 @@
   }
   function stepAnim(now) {
     var k = clamp((now - anim.t0) / anim.dur, 0, 1);
-    var e = 1 - Math.pow(1 - k, 3);
+    var e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
     var s = anim.s0 * Math.pow(anim.s1 / anim.s0, e);
     if (anim.w) zoomAround(anim.w, anim.cx, anim.cy, s);
     else r.setCamera(anim.x0 + (anim.x1 - anim.x0) * e, anim.y0 + (anim.y1 - anim.y0) * e, s);
@@ -487,14 +599,18 @@
     var dt = skipDt || hidden ? 0 : Math.min(0.1, Math.max(0, (now - lastNow) / 1000));
     lastNow = now;
     skipDt = hidden;
-    if (hidden) return;
-    if (phase === 'play' && !paused) {
+    if (hidden || !city) return;
+    if (phase === 'play' && !paused && !listOpen) {
       acc += dt * S.TIME_SCALE * speed;
-      while (acc >= S.DT && !city.done) { S.step(city, S.DT); acc -= S.DT; }
+      while (acc >= S.DT && !ch.cleared && !ch.failed) {
+        S.step(city, S.DT);
+        S.updateChallenge(ch, city);
+        acc -= S.DT;
+      }
     }
     if (anim) stepAnim(now);
     drain();
-    if (phase === 'play' && city.done) finishRun();
+    if (phase === 'play' && (ch.cleared || ch.failed)) endRun();
     if (now - hotAt >= 500) updateHot(now);
     if (now - tickAt >= 250) { tickAt = now; tick(); }
     view.now = now;
@@ -530,7 +646,7 @@
     gest = null;
   }
   function onDown(e) {
-    if (phase !== 'play' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (!city || (e.pointerType === 'mouse' && e.button !== 0)) return;
     anim = null;
     try { cv.setPointerCapture(e.pointerId); } catch (x) {}
     ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
@@ -560,14 +676,14 @@
     if (!ptrs[e.pointerId]) return;
     delete ptrs[e.pointerId];
     var p = pts();
-    if (gest && gest.mode === 'tap' && !p.length && e.type === 'pointerup' && phase === 'play') tap(e.clientX, e.clientY);
+    if (gest && gest.mode === 'tap' && !p.length && e.type === 'pointerup') tap(e.clientX, e.clientY);
     if (!p.length) gest = null;
     else if (p.length === 1) gest = { mode: 'pan', w: r.screenToWorld(p[0].x, p[0].y) };
     else beginPinch();
   }
   function onWheel(e) {
     e.preventDefault();
-    if (phase !== 'play') return;
+    if (!city) return;
     anim = null;
     var dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
     zoomAround(r.screenToWorld(e.clientX, e.clientY), e.clientX, e.clientY, r.getCamera().scale * Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)));
@@ -582,7 +698,7 @@
       return;
     }
     lastTap = { t: now, x: cx, y: cy };
-    pick(cx, cy);
+    if (phase === 'play') pick(cx, cy);
   }
   function pick(cx, cy) {
     var w = r.screenToWorld(cx, cy);
@@ -605,81 +721,106 @@
     else syncView();
   }
 
-  function newCity() {
+  function spotScale() {
+    var b = cv.getBoundingClientRect();
+    return Math.max(0.005, Math.min(b.width, b.height) / AREA_M);
+  }
+  function startSpot(i) {
+    if (!SP.length) return;
+    idx = clamp(Math.floor(Number(i) || 0), 0, SP.length - 1);
+    spot = SP[idx];
+    runSeq++;
     city = S.createCity(root.UBMap, root.UBScenario);
+    ch = S.createChallenge(city, spot);
+    jam0 = Math.max(Number(ch.jam) || 0, Number(ch.smooth) || 0, ch.target * 2, 1);
     phase = 'play';
+    run = null;
     acc = 0;
     fixes = 0;
-    trail = [];
     hot = [];
     view.hot = hot;
+    view.area = spot;
     hotAt = -1e9;
     hotIdx = -1;
     hotTop = -1;
-    anim = null;
     lastTap = null;
     resetGesture();
     setMode('');
     setPause(false);
+    $('end').hidden = true;
+    $('banner').hidden = true;
+    closeList();
     r.clearEffects();
     r.fitCity(city);
-    $('end').hidden = true;
+    var c = r.getCamera();
+    anim = { t0: root.performance.now(), dur: 1100, s0: c.scale, s1: spotScale(), x0: c.x, y0: c.y, x1: spot.x, y1: spot.y };
     updateHud();
     tick();
+    toast(t.goal(ch.target), '');
   }
 
-  function finishRun() {
-    phase = 'end';
+  function endRun() {
+    var won = !!ch.cleared;
+    var prev = rec(spot);
+    var tm = Math.round(Number(ch.time) || 0);
+    var seq = runSeq;
+    phase = won ? 'clear' : 'fail';
     setMode('');
     resetGesture();
-    anim = null;
+    run = {
+      spot: spot, idx: idx, won: won, time: tm,
+      stars: won ? starsFor(tm, spot.par) : 0,
+      spent: Math.round((Number(city.spent) || 0) * 10) / 10,
+      fixes: fixes, oddEven: !!city.oddEven,
+      isBest: won && (!prev || tm < prev.best)
+    };
+    if (run.isBest) {
+      prog[spot.id] = { best: tm, stars: Math.max(run.stars, prev ? prev.stars : 0) };
+      sSet(KEY_PROG, prog);
+      shareFriendTime(spot, tm);
+      submitTotal();
+    }
+    tab = 'spot';
+    refreshCtl();
+    updateHud();
+    if (won) {
+      banner(t.cleared);
+      fanfare();
+      r.effect('built', spot.x, spot.y);
+    } else honk();
+    setTimeout(function () { if (seq === runSeq && phase !== 'play') showEnd(); }, won ? BANNER_MS : 400);
+  }
+  function showEnd() {
+    $('banner').hidden = true;
+    $('toasts').textContent = '';
+    $('end').hidden = false;
+    renderEnd();
+    loadBoard();
+  }
+  function submitTotal() {
+    var tot = totals();
     current = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      uid: userId,
-      score: Math.max(0, Math.round(Number(city.score) || 0)),
-      spent: Math.round((Number(city.spent) || 0) * 10) / 10,
-      fixes: fixes,
-      oddEven: !!city.oddEven
+      uid: userId, total: tot.total, cleared: tot.cleared
     };
     var res = current;
     saveState = lbApi('submit') ? 'saving' : 'failed';
     saveInfo = null;
-    newRecord = false;
-    bestScore = null;
-    tab = 'friends';
-    $('end').hidden = false;
-    fanfare();
-    refreshCtl();
-    renderEnd();
-    evalBest(res);
     writePending(res).then(function () { saveRun(res); });
-    loadBoard();
-  }
-  function evalBest(res) {
-    sGet('best2').then(function (b) {
-      if (res !== current) return;
-      if (b && b.id === res.id) return;
-      var prev = b && typeof b.score === 'number' ? b.score : null;
-      var better = prev == null ? res.score > 0 : res.score > prev;
-      bestScore = better ? res.score : prev;
-      if (!(res.saved && saveInfo)) newRecord = better;
-      if (better) sSet('best2', { id: res.id, score: res.score });
-      renderEnd();
-    });
   }
   function pendingOf(res) {
-    return { id: res.id, uid: res.uid, score: res.score, spent: res.spent, fixes: res.fixes };
+    return { id: res.id, uid: res.uid, total: res.total, cleared: res.cleared };
   }
   function writePending(res) {
-    return sGet('pending2').then(function (p) {
-      if (p && p.uid === res.uid && p.id !== res.id && typeof p.score === 'number' && p.score >= res.score) return;
-      return sSet('pending2', pendingOf(res));
+    return sGet(KEY_PEND).then(function (p) {
+      if (p && p.uid === res.uid && p.id !== res.id && typeof p.total === 'number' && p.total <= res.total) return;
+      return sSet(KEY_PEND, pendingOf(res));
     });
   }
   function clearPendingAfter(res) {
-    return sGet('pending2').then(function (p) {
+    return sGet(KEY_PEND).then(function (p) {
       if (!p) return;
-      if (p.id === res.id || !(p.score > res.score)) return sSet('pending2', null);
+      if (p.id === res.id || !(p.total < res.total)) return sSet(KEY_PEND, null);
       flushPending();
     });
   }
@@ -687,7 +828,7 @@
     var l = lbApi('submit');
     if (!l) return Promise.reject({ code: 'UNAVAILABLE' });
     return timed(attempt(function () {
-      return Usion.leaderboard.submit(res.score, { spent: res.spent, fixes: res.fixes });
+      return Usion.leaderboard.submit(res.total, { cleared: res.cleared });
     }), 15000).then(function (a) {
       return a && a.success === true ? a : Promise.reject({ code: 'NOT_ACKED' });
     });
@@ -706,10 +847,9 @@
     submit(res).then(function (a) {
       saving = null;
       res.saved = true;
-      if (res === current && typeof a.best === 'number') newRecord = a.previous == null || res.score > a.previous;
       setSave(res, 'saved', a);
       clearPendingAfter(res);
-      if (res === current && phase === 'end') loadBoard();
+      if (res === current && phase !== 'play' && tab !== 'spot') loadBoard();
     }, function (e) {
       saving = null;
       setSave(res, e && e.code === 'AUTH_REQUIRED' ? 'guest' : 'failed');
@@ -719,35 +859,91 @@
     if (flushing || !userId || /^guest_/.test(userId) || !lbApi('submit')) return;
     flushing = true;
     var done = function () { flushing = false; };
-    sGet('pending2').then(function (p) {
-      if (!p || p.uid !== userId || typeof p.score !== 'number' || (current && p.id === current.id)) return;
+    sGet(KEY_PEND).then(function (p) {
+      if (!p || p.uid !== userId || typeof p.total !== 'number' || (current && p.id === current.id)) return;
       return submit(p).then(function () { return clearPendingAfter(p); });
     }).then(done, done);
   }
 
+  function shareFriendTime(p, s) {
+    if (!cloudF('set')) return;
+    attempt(function () { return Usion.cloud.friends.set('best:' + p.id, { t: s }); }).catch(noop);
+  }
+  function friendTimes(p) {
+    var c = fcache[p.id];
+    if (c && Date.now() - c.at < FRIENDS_TTL) return c.p;
+    if (!cloudF('list')) return Promise.reject({ code: 'UNAVAILABLE' });
+    var pr = timed(attempt(function () { return Usion.cloud.friends.list('best:' + p.id); }), 10000).then(function (rows) {
+      var out = [];
+      (Array.isArray(rows) ? rows : []).forEach(function (x) {
+        var v = x && x.value ? Number(x.value.t) : NaN;
+        if (x && x.userId && v >= 0) out.push({ id: x.userId, name: x.name || '—', avatar: x.avatar, t: v });
+      });
+      return out.sort(function (a, b) { return a.t - b.t; });
+    });
+    fcache[p.id] = { at: Date.now(), p: pr };
+    pr.catch(function () { if (fcache[p.id] && fcache[p.id].p === pr) delete fcache[p.id]; });
+    return pr;
+  }
+
+  function canShare() {
+    var u = usion();
+    try { return !!(hostReady && u && typeof u.canShareToFeed === 'function' && Usion.canShareToFeed()); } catch (e) { return false; }
+  }
+  function onShare() {
+    if (!run || !run.won || !canShare()) return;
+    var name = spotName(run.spot);
+    var tm = fmtT(run.time);
+    var id = run.spot.id;
+    var b = $('shareBtn');
+    b.disabled = true;
+    attempt(function () {
+      return Usion.shareToFeed('text', {
+        text: t.shareText(name, tm),
+        card: { title: name, subtitle: tm },
+        path: '/spot/' + id
+      });
+    }).then(function () { toast(t.shared, 'ok'); }, function (e) {
+      if (!(e && e.code === 'CANCELLED')) toast(t.shareFail, 'bad');
+    }).then(function () { b.disabled = false; });
+  }
+
   function renderEnd() {
-    if (!current) return;
-    setText($('endTotal'), kmh(current.score));
-    var rec = $('endRec');
-    rec.hidden = !newRecord;
-    setText(rec, t.record);
-    var b = saveInfo && typeof saveInfo.best === 'number' ? saveInfo.best : bestScore;
-    setText($('endBest'), !newRecord && b != null ? t.best + ' ' + kmh(b) : '');
-    setText($('fFix'), String(current.fixes));
-    setText($('fSpent'), '💰' + fmtCost(current.spent));
-    setText($('fOdd'), current.oddEven ? '✓' : '—');
+    if (!run) return;
+    var won = run.won;
+    var head = $('endHead');
+    var b = rec(run.spot);
+    var ni = run.idx + 1;
+    var nb = $('nextBtn');
+    setText(head, won ? t.cleared : t.timeUp);
+    head.className = 'head' + (won ? '' : ' fail');
+    setText($('endSpot'), spotName(run.spot));
+    $('endTotal').hidden = !won;
+    setText($('endTotal'), fmtT(run.time));
+    $('endStars').hidden = !won;
+    fillStars($('endStars'), run.stars);
+    setAttr($('endStars'), 'aria-label', run.stars + '/3');
+    $('endRec').hidden = !run.isBest;
+    setText($('endBest'), !run.isBest && b ? t.best + ' ' + fmtT(b.best) : '');
+    setText($('fFix'), String(run.fixes));
+    setText($('fSpent'), '💰' + fmtCost(run.spent));
+    setText($('fOdd'), run.oddEven ? '✓' : '—');
+    $('saveRow').hidden = !current;
     var txt = { saving: t.saving, saved: t.saved, failed: t.failed, guest: t.guest }[saveState] || '';
     if (saveState === 'saved' && saveInfo && saveInfo.rank) txt += ' · #' + saveInfo.rank;
     setText($('saveText'), txt);
     $('saveRow').className = 'save ' + saveState;
     $('retry').hidden = !(saveState === 'failed' || saveState === 'guest');
+    $('shareBtn').hidden = !(won && canShare());
+    nb.hidden = ni >= SP.length;
+    nb.disabled = !(ni < SP.length && isOpen(ni));
+    nb.classList.toggle('primary', won);
+    $('again').classList.toggle('primary', !won);
   }
 
-  function boardMsg(s, retry) {
-    var box = $('lb');
+  function msgEl(s, retry) {
     var m = doc.createElement('div');
     var p = doc.createElement('span');
-    box.textContent = '';
     m.className = 'msg';
     p.textContent = s;
     m.appendChild(p);
@@ -759,27 +955,30 @@
       b.addEventListener('click', loadBoard);
       m.appendChild(b);
     }
-    box.appendChild(m);
+    return m;
+  }
+  function boardMsg(s, retry) {
+    var box = $('lb');
+    box.textContent = '';
+    box.appendChild(msgEl(s, retry));
   }
   function openProfile(id) {
     var u = usion();
     try { if (id && u && u.user && typeof u.user.openProfile === 'function') Usion.user.openProfile(id); } catch (e) {}
   }
-  function boardRow(e, i) {
-    var me = !!e.is_me;
-    var el = doc.createElement(me ? 'div' : 'button');
-    var name = e.name || '—';
-    var rank = e.rank || i + 1;
+  function boardRow(o) {
+    var el = doc.createElement(o.me ? 'div' : 'button');
+    var name = o.name || '—';
     var rk = doc.createElement('span');
     var nm = doc.createElement('span');
     var sc = doc.createElement('span');
     var av;
-    el.className = 'row' + (me ? ' me' : '');
+    el.className = 'row' + (o.me ? ' me' : '');
     rk.className = 'rk';
-    rk.textContent = String(rank);
-    if (typeof e.avatar === 'string' && /^https?:/.test(e.avatar)) {
+    rk.textContent = String(o.rank);
+    if (typeof o.avatar === 'string' && /^https?:/.test(o.avatar)) {
       av = doc.createElement('img');
-      av.src = e.avatar;
+      av.src = o.avatar;
       av.alt = '';
       av.draggable = false;
       av.onerror = function () { av.style.visibility = 'hidden'; };
@@ -792,35 +991,58 @@
     nm.className = 'nm';
     nm.textContent = name;
     sc.className = 'sc';
-    sc.textContent = kmh(e.score);
+    sc.textContent = o.score;
     el.appendChild(rk);
     el.appendChild(av);
     el.appendChild(nm);
     el.appendChild(sc);
-    if (!me) {
+    if (!o.me) {
       el.type = 'button';
-      el.setAttribute('aria-label', rank + '. ' + name + ', ' + kmh(e.score));
-      el.addEventListener('click', function () { openProfile(e.user_id); });
+      el.setAttribute('aria-label', o.rank + '. ' + name + ', ' + o.score);
+      el.addEventListener('click', function () { openProfile(o.id); });
     }
     return el;
   }
   function loadBoard() {
     var seq = ++boardSeq;
     var which = tab;
-    $('tabF').setAttribute('aria-selected', String(which === 'friends'));
-    $('tabG').setAttribute('aria-selected', String(which === 'global'));
+    var box = $('lb');
+    setAttr($('tabS'), 'aria-selected', String(which === 'spot'));
+    setAttr($('tabF'), 'aria-selected', String(which === 'friends'));
+    setAttr($('tabG'), 'aria-selected', String(which === 'global'));
+    if (!run) return;
+    boardMsg(t.loading);
+    if (which === 'spot') {
+      var p = run.spot;
+      friendTimes(p).then(function (rows) {
+        if (seq !== boardSeq) return;
+        var all = rows.slice();
+        var mine = rec(p);
+        if (mine) all.push({ me: true, name: t.me, t: mine.best });
+        all.sort(function (a, b) { return a.t - b.t; });
+        box.textContent = '';
+        if (!rows.length) box.appendChild(msgEl(t.noFriends));
+        all.forEach(function (x, i) {
+          box.appendChild(boardRow({ me: !!x.me, id: x.id, name: x.name, avatar: x.avatar, rank: i + 1, score: fmtT(x.t) }));
+        });
+      }, function () {
+        if (seq === boardSeq) boardMsg(t.error, true);
+      });
+      return;
+    }
     var l = lbApi(which === 'friends' ? 'friends' : 'top');
     if (!l) { boardMsg(t.error, true); return; }
-    boardMsg(t.loading);
     timed(attempt(function () {
       return which === 'friends' ? Usion.leaderboard.friends({ limit: 20 }) : Usion.leaderboard.top({ limit: 10 });
     }), 10000).then(function (rows) {
       if (seq !== boardSeq) return;
       rows = Array.isArray(rows) ? rows : [];
       if (!rows.length) { boardMsg(t.empty); return; }
-      var box = $('lb');
       box.textContent = '';
-      for (var i = 0; i < rows.length; i++) box.appendChild(boardRow(rows[i] || {}, i));
+      rows.forEach(function (e, i) {
+        e = e || {};
+        box.appendChild(boardRow({ me: !!e.is_me, id: e.user_id, name: e.name, avatar: e.avatar, rank: e.rank || i + 1, score: fmtLong(e.score) }));
+      });
     }, function () {
       if (seq === boardSeq) boardMsg(t.error, true);
     });
@@ -829,6 +1051,64 @@
     if (tab === w) return;
     tab = w;
     loadBoard();
+  }
+
+  function openList() {
+    if (!SP.length) return;
+    listOpen = true;
+    closeCard();
+    $('list').hidden = false;
+    renderList();
+  }
+  function closeList() {
+    listOpen = false;
+    $('list').hidden = true;
+  }
+  function renderList() {
+    if (!listOpen) return;
+    var box = $('spots');
+    box.textContent = '';
+    SP.forEach(function (p, i) {
+      var open = isOpen(i);
+      var v = rec(p);
+      var b = doc.createElement('button');
+      var num = doc.createElement('span');
+      var si = doc.createElement('span');
+      var nm = doc.createElement('b');
+      var fr = doc.createElement('small');
+      var sr = doc.createElement('span');
+      b.type = 'button';
+      b.className = 'spot' + (i === idx ? ' cur' : '') + (v ? ' done' : '');
+      b.disabled = !open;
+      num.className = 'num';
+      num.textContent = String(i + 1);
+      si.className = 'si';
+      nm.textContent = spotName(p);
+      si.appendChild(nm);
+      si.appendChild(fr);
+      sr.className = 'sr';
+      if (open) {
+        var st = doc.createElement('span');
+        var bt = doc.createElement('b');
+        st.className = 'st';
+        fillStars(st, v ? v.stars : 0);
+        bt.textContent = v ? fmtT(v.best) : '—';
+        sr.appendChild(st);
+        sr.appendChild(bt);
+      } else {
+        sr.className = 'sr lock';
+        sr.textContent = '🔒';
+      }
+      b.appendChild(num);
+      b.appendChild(si);
+      b.appendChild(sr);
+      b.setAttribute('aria-label', spotName(p) + ', ' + (open ? (v ? fmtT(v.best) + ', ' + v.stars + '/3' : '—') : t.locked));
+      b.addEventListener('click', function () { if (isOpen(i)) startSpot(i); });
+      box.appendChild(b);
+      friendTimes(p).then(function (rows) {
+        if (rows.length) setText(fr, rows[0].name + ' ' + fmtT(rows[0].t));
+      }, noop);
+    });
   }
 
   function onResize() {
@@ -851,19 +1131,30 @@
     root.addEventListener('blur', resetGesture);
     doc.addEventListener('visibilitychange', function () { skipDt = true; resetGesture(); });
     doc.addEventListener('keydown', function (e) {
-      if (e.key !== 'Escape' || phase !== 'play') return;
-      if (mode) setMode('');
+      if (e.key !== 'Escape') return;
+      if (listOpen) closeList();
+      else if (mode) setMode('');
       else closeCard();
     });
     $('speed').addEventListener('click', function () { setSpeed(speed === 1 ? 3 : 1); });
     $('pause').addEventListener('click', function () { setPause(!paused); });
-    $('roadBtn').addEventListener('click', function () { if (phase === 'play') setMode(mode === 'road' ? '' : 'road'); });
+    $('roadBtn').addEventListener('click', function () { if (phase === 'play' && city) setMode(mode === 'road' ? '' : 'road'); });
     $('oddBtn').addEventListener('click', function () { doAct({ type: 'oddeven' }); });
-    $('hotBtn').addEventListener('click', nextHot);
+    $('hotBtn').addEventListener('click', function () { if (city) nextHot(); });
+    $('mapBtn').addEventListener('click', openList);
+    $('endMap').addEventListener('click', openList);
+    $('listX').addEventListener('click', closeList);
+    $('list').addEventListener('click', function (e) { if (e.target === $('list')) closeList(); });
     $('bud').addEventListener('animationend', function () { $('bud').classList.remove('low'); });
     card.addEventListener('animationend', function () { card.classList.remove('in'); });
-    $('again').addEventListener('click', newCity);
+    $('again').addEventListener('click', function () { startSpot(run ? run.idx : idx); });
+    $('nextBtn').addEventListener('click', function () {
+      var ni = (run ? run.idx : idx) + 1;
+      if (ni < SP.length && isOpen(ni)) startSpot(ni);
+    });
+    $('shareBtn').addEventListener('click', onShare);
     $('retry').addEventListener('click', function () { saveRun(current); });
+    $('tabS').addEventListener('click', function () { showTab('spot'); });
     $('tabF').addEventListener('click', function () { showTab('friends'); });
     $('tabG').addEventListener('click', function () { showTab('global'); });
     root.addEventListener('resize', onResize);
@@ -873,16 +1164,21 @@
   function installTest() {
     root.UBT = {
       city: function () { return city; },
-      state: function () { return phase; },
+      challenge: function () { return ch; },
+      state: function () { return listOpen ? 'list' : phase; },
+      act: function (a) { return doAct(a); },
       finishNow: function () {
-        if (phase !== 'play') return false;
+        if (!ch || phase !== 'play') return phase;
         var guard = Math.ceil((city.end - city.time) / S.DT) + 100;
-        while (!city.done && guard-- > 0) S.step(city, S.DT);
+        while (!ch.cleared && !ch.failed && guard-- > 0) {
+          S.step(city, S.DT);
+          S.updateChallenge(ch, city);
+        }
         drain();
-        if (city.done) finishRun();
-        return !!city.done;
+        if (ch.cleared || ch.failed) endRun();
+        return phase;
       },
-      act: function (a) { return doAct(a); }
+      start: function (i) { startSpot(i); return idx; }
     };
   }
 
@@ -890,32 +1186,37 @@
     if (started) return;
     started = true;
     S = root.Sim;
+    SP = (root.UBScenario && root.UBScenario.spots) || [];
     cv = $('cv');
     stage = $('stage');
     card = $('card');
     r = root.Render.create(cv);
     bind();
-    r.resize();
-    newCity();
     applyHost();
+    r.resize();
     if (/[?&]test=1(&|$)/.test(String(root.location.search)) && root.__UBT_TEST === true) installTest();
     root.requestAnimationFrame(frame);
+    syncProg();
+    flushPending();
   }
   function adopt() {
-    if (current && !current.saved) {
-      current.uid = userId;
-      evalBest(current);
-      writePending(current).then(function () { saveRun(current); });
-    } else flushPending();
-    if (phase === 'end') loadBoard();
+    if (current && !current.saved && current.uid !== userId) {
+      current = null;
+      saveState = '';
+    }
+    syncProg();
+    flushPending();
+    if (phase !== 'play' && !$('end').hidden) loadBoard();
   }
   function onInit() {
     var u = usion();
     hostReady = true;
+    fcache = {};
     try { userId = (u && u.user && typeof u.user.getId === 'function' && Usion.user.getId()) || null; } catch (e) { userId = null; }
-    if (started) applyHost();
-    else start();
-    adopt();
+    if (started) {
+      applyHost();
+      adopt();
+    } else start();
   }
   function boot() {
     var u = usion();

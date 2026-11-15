@@ -134,7 +134,7 @@ tests.challenges = function () {
   function play(spot, policy) {
     const c = Sim.createCity(M, S);
     const ch = Sim.createChallenge(c, spot);
-    assert(ch.edges.length > 5 && ch.jam > 0 && ch.target >= 20 && c.time === spot.start && c.focus);
+    assert(ch.edges.length > 5 && ch.jam > 0 && ch.target >= 20 && c.time > spot.start && ch.start === c.time && c.focus);
     if (policy) policy(c, ch);
     while (!c.done && !ch.cleared) { Sim.step(c, Sim.DT); Sim.updateChallenge(ch, c); }
     return ch;

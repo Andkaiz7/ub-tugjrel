@@ -19,7 +19,8 @@
   var LOST_AFTER = 30;
   var MAX_LANES = 4;
   var HOLD = 120;
-  var LIMIT = 3600;
+  var LIMIT = 2700;
+  var SETTLE = 300;
   var MAX_ROAD = 3000;
   var NEW_EDGES = 48;
   var COSTS = { overpass: 30, lights: 12, widenPerKm: 12, roadPerKm: 14, bridge: 25, oddeven: 60 };
@@ -77,6 +78,7 @@
       lights: new Uint8Array(nodeCount),
       oddEven: false,
       hold: 0,
+      demandScale: 1,
       focus: null,
       budget: sc.budget,
       spent: 0,
@@ -467,7 +469,7 @@
   }
 
   function spawn(city, dt) {
-    var rate = DEMAND * (city.hold ? city.hold : profile(city.time));
+    var rate = DEMAND * (city.hold ? city.hold : profile(city.time)) * city.demandScale;
     var waiting = 0;
     for (var i = 0; i < city._homes.length; i++) {
       var h = city._homes[i];
@@ -753,12 +755,15 @@
 
   function createChallenge(city, spot) {
     while (city.time < spot.start && !city.done) step(city, DT);
-    city.hold = profile(city.time) * (spot.demand || 1);
-    city.end = city.time + LIMIT;
+    city.hold = profile(city.time);
+    city.demandScale = spot.demand || 1;
     city.focus = { x: spot.x, y: spot.y, r: spot.r };
     for (var e = 0; e < city.edgeCount; e++) setLinkParams(city, e);
     refreshNodes(city);
     route(city);
+    var settle = city.time + SETTLE;
+    while (city.time < settle && !city.done) step(city, DT);
+    city.end = city.time + LIMIT;
     var edges = areaEdges(city, spot.x, spot.y, spot.r);
     var jam = areaJam(city, edges);
     return { spot: spot, edges: edges, start: city.time, jam: jam, smooth: jam, target: Math.max(20, Math.round(jam * spot.goal / 10) * 10), below: -1, cleared: false, time: 0, failed: false };

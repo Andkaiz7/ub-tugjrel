@@ -1122,6 +1122,60 @@
       }
     }
 
+    function drawArea(area, lang, camX, camY, scale, halfW, halfH, now) {
+      if (!area || !(area.r > 0)) return;
+      var sx = (area.x - camX) * scale + halfW;
+      var sy = (area.y - camY) * scale + halfH;
+      var sr = area.r * scale;
+      if (!isFinite(sx) || !isFinite(sy) || !isFinite(sr)) return;
+      ctx.save();
+      var g = ctx.createRadialGradient(sx, sy, sr, sx, sy, sr + 40);
+      g.addColorStop(0, 'rgba(15, 23, 42, 0)');
+      g.addColorStop(1, 'rgba(15, 23, 42, 0.42)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, cssW, cssH);
+      ctx.setLineDash([10, 8]);
+      ctx.lineDashOffset = -now * 0.012;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.95)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      var name = area.name ? (area.name[lang] || area.name.mn || '') : '';
+      ctx.fillStyle = '#facc15';
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.bezierCurveTo(sx - 3, sy - 7, sx - 8, sy - 10, sx - 8, sy - 16);
+      ctx.arc(sx, sy - 16, 8, Math.PI, 0);
+      ctx.bezierCurveTo(sx + 8, sy - 10, sx + 3, sy - 7, sx, sy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(sx, sy - 16, 3, 0, Math.PI * 2);
+      ctx.fill();
+      if (name) {
+        ctx.font = '800 12px ' + FONT_STACK;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        var tw = ctx.measureText(name).width + 16;
+        var ty = sy - 38;
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(sx - tw / 2 + 10, ty, 10, Math.PI / 2, Math.PI * 1.5);
+        ctx.arc(sx + tw / 2 - 10, ty, 10, -Math.PI / 2, Math.PI / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#facc15';
+        ctx.fillText(name, sx, ty + 0.5);
+      }
+      ctx.restore();
+    }
+
     function drawAttribution() {
       ctx.save();
       ctx.font = '500 9px ' + FONT_STACK;
@@ -1169,6 +1223,7 @@
       drawCars(city, sim, artThings, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawZones(scen, artThings, camX, camY, scale, halfW, halfH, lang);
       drawPlaces(map, camX, camY, scale, halfW, halfH, lang);
+      drawArea(v.area, lang, camX, camY, scale, halfW, halfH, now);
       drawHotspots(city, v.hot, camX, camY, scale, halfW, halfH, now);
       drawSelectionAndPending(city, v, sim, camX, camY, scale, halfW, halfH, now);
       drawEffects(camX, camY, scale, halfW, halfH, now);
