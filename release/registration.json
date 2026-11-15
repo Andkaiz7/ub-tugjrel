@@ -3,9 +3,16 @@
   "description": "Улаанбаатарын түгжрэлийг өөрөө зам, гүүр барьж шийд. 5 дүүргийг хамгийн хурдан туулсан хүн тэргүүлнэ.",
   "service_type": "game",
   "cost": 0,
-  "tags": ["game", "iframe"],
+  "tags": [
+    "game",
+    "iframe"
+  ],
   "genre": "strategy",
   "max_players": 1,
-  "is_published": false,
-  "leaderboard": {"enabled": true, "order": "asc"}
+  "is_published": true,
+  "leaderboard": {
+    "enabled": true,
+    "order": "asc"
+  },
+  "visibility": "private"
 }
