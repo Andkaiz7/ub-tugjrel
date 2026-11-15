@@ -84,6 +84,8 @@
       waiting: 0,
       score: 0,
       speed: 0,
+      speedNow: 0,
+      _stepMeters: 0,
       _meters: 0,
       _agentSec: 0,
       cars: [],
@@ -375,6 +377,7 @@
         var moved = target > a.s ? target - a.s : 0;
         if (moved) {
           city._meters += moved;
+          city._stepMeters += moved;
           a.s = target;
         }
         if (moved < v * 0.3) slow++;
@@ -496,6 +499,9 @@
     city.rate = n ? sum / n : 0;
     city.active = city.cars.length;
     city._agentSec += city.active + city.waiting;
+    var inst = city.active + city.waiting ? city._stepMeters / (city.active + city.waiting) * 3.6 : city.speedNow;
+    city.speedNow = city.speedNow ? city.speedNow * 0.98 + inst * 0.02 : inst;
+    city._stepMeters = 0;
     city.speed = city._agentSec ? city._meters / city._agentSec * 3.6 : 0;
     city.score = Math.round(city.speed * 10);
   }

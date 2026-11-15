@@ -3,75 +3,121 @@
 
   var TXT = {
     mn: {
-      road: 'Зам', bridge: 'Гүүр', erase: 'Арилгах', left: 'үлдсэн',
-      restart: 'Дахин эхлүүлэх', confirm: 'Дахин дарвал шинээр эхэлнэ',
-      jam: 'Түгжрэл! +10с', best: 'Шилдэг', record: 'Шинэ рекорд!',
+      perMin: '/мин', rateL: 'Урсгал', spdL: 'Дундаж хурд', kmh: 'км/ц', budL: 'Төсөв', unit: 'тэрбум₮',
+      speed: 'Хурд', pause: 'Түр зогсоох', resume: 'Үргэлжлүүлэх',
+      road: 'Шинэ зам', oddeven: 'Тэгш-сондгой', hot: 'Дараагийн түгжрэл',
+      overpass: 'Гүүрэн гарц', lights: 'Гэрлэн дохио', widen: 'Эгнээ нэмэх',
+      build: 'Барих', cancel: 'Болих', junction: 'Уулзвар', unnamed: 'Нэргүй зам', km: 'км',
+      pickA: 'Эхлэх цэгээ сонго', pickB: 'Төгсөх цэгээ сонго', noJam: 'Түгжрэл алга',
+      done: {
+        overpass: 'Гүүрэн гарц баригдлаа', lights: 'Гэрлэн дохио тавигдлаа', widen: 'Эгнээ нэмэгдлээ',
+        road: 'Шинэ зам баригдлаа', oddeven: 'Тэгш-сондгой эхэллээ'
+      },
+      why: {
+        budget: 'Төсөв хүрэлцэхгүй', notJunction: 'Уулзвар биш', already: 'Аль хэдийн бий',
+        maxLanes: 'Эгнээ дүүрсэн', tooLong: 'Хэт урт', same: 'Ижил цэг', exists: 'Зам бий'
+      },
+      nope: 'Болохгүй',
+      avg: 'дундаж хурд', fixes: 'Засвар', spent: 'Зарцуулсан',
+      best: 'Шилдэг', record: 'Шинэ рекорд!',
       saving: 'Хадгалж байна…', saved: 'Хадгалагдлаа', failed: 'Хадгалагдсангүй',
       guest: 'Нэвтэрч хадгална уу', retry: 'Дахин оролдох',
       friends: 'Найзууд', global: 'Нийт', loading: 'Ачаалж байна…',
       empty: 'Рекорд алга байна', error: 'Рекорд ачаалсангүй',
-      again: 'Дахин тоглох', district: 'Дүүрэг', progress: 'Хүргэлт'
+      again: 'Дахин тоглох'
     },
     en: {
-      road: 'Road', bridge: 'Bridge', erase: 'Erase', left: 'left',
-      restart: 'Restart run', confirm: 'Tap again to restart',
-      jam: 'Jam! +10s', best: 'Best', record: 'New record!',
+      perMin: '/min', rateL: 'Flow', spdL: 'Average speed', kmh: 'km/h', budL: 'Budget', unit: 'bn₮',
+      speed: 'Speed', pause: 'Pause', resume: 'Resume',
+      road: 'New road', oddeven: 'Odd-even', hot: 'Next jam',
+      overpass: 'Overpass', lights: 'Smart lights', widen: 'Add lane',
+      build: 'Build', cancel: 'Cancel', junction: 'Junction', unnamed: 'Unnamed road', km: 'km',
+      pickA: 'Tap the start point', pickB: 'Tap the end point', noJam: 'No jams',
+      done: {
+        overpass: 'Overpass built', lights: 'Lights installed', widen: 'Lane added',
+        road: 'Road built', oddeven: 'Odd-even on'
+      },
+      why: {
+        budget: 'Not enough budget', notJunction: 'Not a junction', already: 'Already built',
+        maxLanes: 'Max lanes', tooLong: 'Too long', same: 'Same point', exists: 'Road exists'
+      },
+      nope: 'Not possible',
+      avg: 'average speed', fixes: 'Fixes', spent: 'Spent',
+      best: 'Best', record: 'New record!',
       saving: 'Saving…', saved: 'Saved', failed: 'Not saved',
       guest: 'Sign in to save', retry: 'Retry',
       friends: 'Friends', global: 'Global', loading: 'Loading…',
       empty: 'No records yet', error: 'Could not load records',
-      again: 'Play again', district: 'District', progress: 'Delivered'
+      again: 'Play again'
     }
   };
-  var TOOLS = ['road', 'bridge', 'erase'];
-  var TRANSITION_MS = 2000;
-  var ARM_MS = 2000;
+  var NODE_PX = 30;
+  var EDGE_PX = 20;
+  var SLOP_PX = 6;
+  var DOUBLE_MS = 300;
+  var HOT_SCALE = 0.22;
 
   var doc = root.document;
-  var L, S, r, cv;
+  var S, r, cv, stage, card;
   var lang = 'mn';
   var t = TXT.mn;
   var userId = null;
   var hostReady = false;
   var started = false;
-  var li = 0;
-  var world = null;
-  var splits = [];
+  var city = null;
   var phase = 'play';
-  var clockOn = false;
+  var speed = 1;
+  var paused = false;
   var acc = 0;
   var lastNow = 0;
   var skipDt = true;
-  var trans = 0;
-  var tool = 'road';
-  var drag = null;
-  var preview = null;
-  var waterGlow = 0;
-  var armTimer = 0;
+  var tickAt = 0;
+  var fixes = 0;
+  var trail = [];
+  var hot = [];
+  var hotAt = -1e9;
+  var hotIdx = -1;
+  var hotTop = -1;
+  var jamAt = -1e9;
+  var mode = '';
+  var road = null;
+  var sel = null;
+  var view = { now: 0, lang: 'mn', selection: null, pending: null, hot: [] };
+  var ptrs = {};
+  var gest = null;
+  var lastTap = null;
+  var anim = null;
   var current = null;
   var saving = null;
   var saveState = '';
   var saveInfo = null;
   var newRecord = false;
-  var bestMs = 0;
+  var bestScore = null;
   var tab = 'friends';
   var boardSeq = 0;
   var flushing = false;
   var ac = null;
-  var pills = [];
 
   function $(id) { return doc.getElementById(id); }
   function noop() {}
   function setText(el, s) { if (el.textContent !== s) el.textContent = s; }
-  function sum(a) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i]; return s; }
+  function setAttr(el, k, v) { if (el.getAttribute(k) !== v) el.setAttribute(k, v); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function fmt(ms) {
-    var ds = Math.floor(Math.max(0, ms) / 100);
-    return Math.floor(ds / 600) + ':' + pad(Math.floor(ds / 10) % 60) + '.' + (ds % 10);
+  function hhmm(sec) {
+    var m = Math.floor((Number(sec) || 0) / 60);
+    return pad(Math.floor(m / 60) % 24) + ':' + pad(m % 60);
   }
-  function fmtSec(sec) {
-    var s = Math.max(0, Math.round(Number(sec) || 0));
-    return Math.floor(s / 60) + ':' + pad(s % 60);
+  function kmh(score) { return ((Number(score) || 0) / 10).toFixed(1) + ' ' + t.kmh; }
+  function fmtCost(v) {
+    v = Number(v) || 0;
+    return String(v >= 10 || v === Math.round(v) ? Math.round(v) : Math.round(v * 10) / 10);
+  }
+  function why(q) { return (q && t.why[q.reason]) || t.nope; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function flash(el, c) {
+    el.classList.remove(c);
+    void el.offsetWidth;
+    el.classList.add(c);
   }
 
   function usion() { return root.Usion; }
@@ -139,90 +185,84 @@
     t = TXT[lang];
     doc.documentElement.lang = lang;
     doc.documentElement.classList.toggle('dark', th === 'dark');
-    $('restart').setAttribute('aria-label', armTimer ? t.confirm : t.restart);
-    $('tabF').textContent = t.friends;
-    $('tabG').textContent = t.global;
-    $('again').textContent = t.again;
-    $('retry').textContent = t.retry;
-    $('pills').setAttribute('aria-label', t.progress);
-    if (world) { buildHud(); refreshTools(); }
+    var i;
+    var els = doc.querySelectorAll('[data-t]');
+    for (i = 0; i < els.length; i++) els[i].textContent = t[els[i].getAttribute('data-t')];
+    els = doc.querySelectorAll('[data-ta]');
+    for (i = 0; i < els.length; i++) els[i].setAttribute('aria-label', t[els[i].getAttribute('data-ta')]);
+    setSpeed(speed);
+    setPause(paused);
+    if (city) {
+      setMode('');
+      tick();
+    }
     if (phase === 'end') renderEnd();
   }
 
-  function buildHud() {
-    var box = $('pills');
-    var n = world.quota.length;
-    box.textContent = '';
-    pills = [];
-    for (var c = 0; c < n; c++) {
-      var p = doc.createElement('span');
-      p.className = 'pill';
-      p.style.background = L.COLORS[c];
-      box.appendChild(p);
-      pills.push(p);
-    }
-    markDots(li);
+  function hudSpeed() {
+    return Number(typeof city.speedNow === 'number' ? city.speedNow : city.speed) || 0;
   }
-  function markDots(k) {
-    var box = $('dots');
-    var n = L.LEVELS.length;
-    if (box.children.length !== n) {
-      box.textContent = '';
-      for (var i = 0; i < n; i++) box.appendChild(doc.createElement('i'));
-    }
-    for (var j = 0; j < n; j++) box.children[j].className = j < k ? 'done' : j === k ? 'cur' : '';
-    box.setAttribute('aria-label', t.district + ' ' + Math.min(k + 1, n) + '/' + n);
+  function trend() {
+    var v = hudSpeed();
+    var last = trail[trail.length - 1];
+    if (!last || city.time !== last.t) trail.push({ t: city.time, v: v });
+    while (trail.length > 1 && trail[1].t <= city.time - 60) trail.shift();
+    var d = city.time - trail[0].t >= 30 ? v - trail[0].v : 0;
+    return d > 0.05 ? 'up' : d < -0.05 ? 'down' : '';
   }
   function updateHud() {
-    var ms = phase === 'end' && current ? current.ms : sum(splits) + (phase === 'play' ? (world.time + world.penaltyTime) * 1000 : 0);
-    setText($('clock'), fmt(ms));
-    if (phase === 'transition') return;
-    for (var c = 0; c < pills.length; c++) {
-      var q = world.quota[c];
-      var d = Math.min(world.delivered[c], q);
-      setText(pills[c], d + '/' + q);
-      var done = d >= q;
-      if (pills[c].classList.contains('done') !== done) pills[c].classList.toggle('done', done);
-    }
+    var tr = trend();
+    var el = $('trend');
+    setText($('clock'), hhmm(city.time));
+    setText($('spd'), kmh(Math.round(hudSpeed() * 10)));
+    setText(el, tr === 'up' ? '▲' : tr === 'down' ? '▼' : '');
+    if (el.className !== tr) el.className = tr;
+    setText($('rate'), '🚗 ' + Math.round(Number(city.rate) || 0) + t.perMin);
+    setText($('bud'), '💰 ' + fmtCost(city.budget));
   }
-
-  function setTool(n) {
-    tool = n;
-    for (var i = 0; i < TOOLS.length; i++) $('tool-' + TOOLS[i]).setAttribute('aria-pressed', String(TOOLS[i] === n));
+  function tick() {
+    refreshCard();
+    refreshCtl();
+    setAttr($('rate'), 'aria-label', t.rateL + ' ' + Math.round(Number(city.rate) || 0) + t.perMin);
+    setAttr($('spdBox'), 'aria-label', t.spdL + ' ' + kmh(Math.round(hudSpeed() * 10)));
+    setAttr($('bud'), 'aria-label', t.budL + ' ' + fmtCost(city.budget) + ' ' + t.unit);
   }
-  function refreshTools() {
-    var u = S.usage(world);
-    var b = world.budget;
-    var rl = Math.max(0, b.roads - u.roads);
-    var bl = Math.max(0, b.bridges - u.bridges);
-    var rb = $('tool-road');
-    var bb = $('tool-bridge');
-    setText(rb.querySelector('.cnt'), String(rl));
-    setText(bb.querySelector('.cnt'), '×' + bl);
-    rb.classList.toggle('empty', rl === 0);
-    bb.classList.toggle('empty', bl === 0);
-    rb.setAttribute('aria-label', t.road + ', ' + rl + ' ' + t.left);
-    bb.setAttribute('aria-label', t.bridge + ', ' + bl + ' ' + t.left);
-    $('tool-erase').setAttribute('aria-label', t.erase);
+  function refreshCtl() {
+    var b = $('oddBtn');
+    var used = !!city.oddEven;
+    var q = S.quote(city, { type: 'oddeven' }) || {};
+    var s = used ? '✓' : '💰' + fmtCost(q.cost);
+    b.disabled = used || q.ok !== true || phase !== 'play';
+    setText($('oddCost'), s);
+    setAttr(b, 'aria-label', t.oddeven + ', ' + (used || q.ok ? s : why(q)));
   }
-  function flash(el, c) {
-    el.classList.remove(c);
-    void el.offsetWidth;
-    el.classList.add(c);
+  function setSpeed(v) {
+    speed = v;
+    var b = $('speed');
+    setText(b, v + '×');
+    setAttr(b, 'aria-pressed', String(v !== 1));
+    setAttr(b, 'aria-label', t.speed + ' ' + v + '×');
   }
-  function bump(stop) {
-    if (stop === 'water') { waterGlow = 1; flash($('tool-bridge'), 'pulse'); }
-    if (stop === 'budget') flash($('tool-' + tool), 'pulse');
-    flash(cv, 'shake');
+  function setPause(p) {
+    paused = p;
+    var b = $('pause');
+    setAttr(b, 'aria-pressed', String(p));
+    setAttr(b, 'aria-label', p ? t.resume : t.pause);
   }
-  function toast(s) {
+  function hint() {
+    var h = $('hint');
+    var s = mode === 'road' && road.b < 0 ? (road.a < 0 ? t.pickA : t.pickB) : '';
+    h.hidden = !s;
+    setText(h, s);
+  }
+  function toast(s, kind) {
     var box = $('toasts');
     var el = doc.createElement('div');
-    el.className = 'toast';
+    el.className = 'toast ' + (kind || '');
     el.textContent = s;
     box.appendChild(el);
     while (box.children.length > 3) box.removeChild(box.firstChild);
-    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1600);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1800);
   }
 
   function audio() {
@@ -253,61 +293,193 @@
       o.stop(t0 + dur + 0.03);
     } catch (e) {}
   }
+  function blip() { tone('sine', 880, 0, 0, 0.06, 0.05); }
   function ding() { tone('sine', 1046, 0, 0, 0.12, 0.12); tone('sine', 1568, 0, 0.06, 0.2, 0.08); }
   function honk() { tone('square', 370, 340, 0, 0.24, 0.05); tone('square', 466, 430, 0, 0.24, 0.04); }
+  function fanfare() { tone('triangle', 523, 0, 0, 0.16, 0.1); tone('triangle', 659, 0, 0.12, 0.16, 0.1); tone('triangle', 784, 0, 0.24, 0.3, 0.12); }
 
-  function newWorld(i) {
-    li = i;
-    world = S.createWorld(L.LEVELS[i]);
-    acc = 0;
-    drag = null;
-    preview = null;
-    waterGlow = 0;
-    r.clearEffects();
-    r.fit(world);
-    buildHud();
-    refreshTools();
+  function edgeName(e) {
+    var i = city.ename[e];
+    var names = root.UBMap && root.UBMap.names;
+    return (i >= 0 && names && names[i]) || t.unnamed;
   }
-  function restartRun() {
-    disarm();
-    splits = [];
-    clockOn = false;
-    phase = 'play';
-    trans = 0;
-    $('end').hidden = true;
-    setTool('road');
-    newWorld(0);
+  function nodeName(n) {
+    var best = -1;
+    var bl = -1;
+    for (var e = 0; e < city.edgeCount; e++) {
+      if (city.ename[e] < 0 || (city.ea[e] !== n && city.eb[e] !== n)) continue;
+      var l = Number(S.edgeLoad(city, e)) || 0;
+      if (l > bl) { bl = l; best = e; }
+    }
+    return best < 0 ? t.junction : edgeName(best);
   }
-  function onRestart() {
-    if (armTimer) { restartRun(); return; }
-    var b = $('restart');
-    b.classList.add('armed');
-    b.setAttribute('aria-label', t.confirm);
-    armTimer = setTimeout(disarm, ARM_MS);
+  function km(a, b) {
+    var d = Math.hypot(city.nx[a] - city.nx[b], city.ny[a] - city.ny[b]) / 1000;
+    return (d < 10 ? d.toFixed(1) : String(Math.round(d))) + ' ' + t.km;
   }
-  function disarm() {
-    clearTimeout(armTimer);
-    armTimer = 0;
-    var b = $('restart');
-    b.classList.remove('armed');
-    b.setAttribute('aria-label', t.restart);
+  function syncView() {
+    view.selection = sel && sel.kind !== 'road' ? { type: sel.kind, id: sel.id }
+      : mode === 'road' && road.a >= 0 && road.b < 0 ? { type: 'node', id: road.a } : null;
+    view.pending = mode === 'road' && road.b >= 0 ? { type: 'road', a: road.a, b: road.b, ok: road.ok } : null;
+  }
+  function actButton(cls, label) {
+    var b = doc.createElement('button');
+    var s = doc.createElement('span');
+    b.type = 'button';
+    b.className = 'act ' + cls;
+    s.textContent = label;
+    b.appendChild(s);
+    return b;
+  }
+  function openCard(kind, id, x, y) {
+    var acts;
+    var name;
+    if (kind === 'node') {
+      x = city.nx[id];
+      y = city.ny[id];
+      name = nodeName(id);
+      acts = [{ type: 'overpass', node: id }, { type: 'lights', node: id }];
+    } else if (kind === 'edge') {
+      name = edgeName(id);
+      acts = [{ type: 'widen', edge: id }];
+    } else {
+      x = city.nx[road.b];
+      y = city.ny[road.b];
+      name = t.road + ' · ' + km(road.a, road.b);
+      acts = [{ type: 'road', a: road.a, b: road.b }];
+    }
+    sel = { kind: kind, id: id, x: x, y: y, btns: [] };
+    setText($('cardName'), name);
+    $('meter').hidden = kind === 'road';
+    var box = $('cardActs');
+    box.textContent = '';
+    acts.forEach(function (a) {
+      var label = kind === 'road' ? t.build : t[a.type];
+      var b = actButton('a-' + a.type, label);
+      var c = doc.createElement('b');
+      b.appendChild(c);
+      b.addEventListener('click', function () { doAct(a); });
+      box.appendChild(b);
+      sel.btns.push({ el: b, cost: c, a: a, label: label });
+    });
+    if (kind === 'road') {
+      var x2 = actButton('a-cancel', t.cancel);
+      x2.addEventListener('click', function () { setMode(''); });
+      box.appendChild(x2);
+    }
+    card.hidden = false;
+    flash(card, 'in');
+    refreshCard();
+    placeCard();
+  }
+  function closeCard() {
+    sel = null;
+    card.hidden = true;
+    syncView();
+  }
+  function refreshCard() {
+    if (!sel) return;
+    if (sel.kind !== 'road') {
+      var l = clamp(Number(sel.kind === 'node' ? S.nodeLoad(city, sel.id) : S.edgeLoad(city, sel.id)) || 0, 0, 1);
+      var m = $('meterFill');
+      m.style.width = Math.round(l * 100) + '%';
+      m.style.background = 'hsl(' + Math.round(130 * (1 - l)) + ',78%,45%)';
+    }
+    sel.btns.forEach(function (o) {
+      var q = S.quote(city, o.a) || {};
+      var ok = q.ok === true && phase === 'play';
+      var s = q.ok ? '💰' + fmtCost(q.cost) : why(q) + (q.reason === 'budget' && q.cost ? ' · 💰' + fmtCost(q.cost) : '');
+      o.el.disabled = !ok;
+      setText(o.cost, s);
+      setAttr(o.el, 'aria-label', o.label + ', ' + s);
+      if (o.a.type === 'road') road.ok = ok;
+    });
+    syncView();
+  }
+  function placeCard() {
+    if (!sel) return;
+    var p = r.worldToScreen(sel.x, sel.y);
+    var b = stage.getBoundingClientRect();
+    var w = card.offsetWidth;
+    var h = card.offsetHeight;
+    var x = p.x - b.left - w / 2;
+    var y = p.y - b.top - h - 22;
+    if (y < 8) y = p.y - b.top + 22;
+    x = clamp(x, 8, Math.max(8, b.width - w - 8));
+    y = clamp(y, 8, Math.max(8, b.height - h - 8));
+    card.style.left = Math.round(x) + 'px';
+    card.style.top = Math.round(y) + 'px';
+  }
+  function setMode(m) {
+    mode = m;
+    road = m === 'road' ? { a: -1, b: -1, ok: false } : null;
+    closeCard();
+    setAttr($('roadBtn'), 'aria-pressed', String(m === 'road'));
+    hint();
+  }
+
+  function act(a) {
+    if (phase !== 'play' || !a) return { ok: false, reason: 'over' };
+    var res = S.apply(city, a) || { ok: false };
+    if (res.ok) {
+      if (a.type !== 'oddeven') fixes++;
+      toast((t.done[a.type] || t.build) + ' −' + fmtCost(res.cost), 'ok');
+      ding();
+      drain();
+      flash($('bud'), 'low');
+    } else {
+      toast(why(res), 'bad');
+      honk();
+    }
+    refreshCtl();
+    return res;
+  }
+  function doAct(a) {
+    var res = act(a);
+    if (res.ok) {
+      if (mode === 'road') setMode('');
+      else closeCard();
+    } else refreshCard();
+    return res;
+  }
+  function nextHot() {
+    if (phase !== 'play') return;
+    updateHot(root.performance.now());
+    if (!hot.length) { toast(t.noJam, ''); return; }
+    hotIdx = (hotIdx + 1) % hot.length;
+    var n = hot[hotIdx];
+    var c = r.getCamera();
+    anim = { t0: root.performance.now(), dur: 480, s0: c.scale, s1: Math.max(c.scale, HOT_SCALE), x0: c.x, y0: c.y, x1: city.nx[n], y1: city.ny[n] };
+    blip();
+  }
+  function updateHot(now) {
+    hotAt = now;
+    hot = S.hotspots(city, 5) || [];
+    view.hot = hot;
+    var top = hot.length ? hot[0] : -1;
+    if (top >= 0 && top !== hotTop && now - jamAt > 6000 && phase === 'play' && (Number(S.nodeLoad(city, top)) || 0) > 0.75) {
+      jamAt = now;
+      r.effect('jam', city.nx[top], city.ny[top]);
+    }
+    hotTop = top;
   }
 
   function drain() {
-    var evs = world.events.splice(0, world.events.length);
-    for (var i = 0; i < evs.length; i++) {
-      var e = evs[i];
-      if (e.type === 'deliver') { r.effect('deliver', e.tile, e.color); ding(); }
-      else if (e.type === 'penalty') { r.effect('penalty', e.tile); honk(); toast(t.jam); }
-      else if (e.type === 'cleared' && phase === 'play') districtCleared();
+    var evs = city.events;
+    if (!evs || !evs.length) return;
+    var list = evs.splice(0, evs.length);
+    for (var i = 0; i < list.length; i++) {
+      var e = list[i];
+      if (e && e.type === 'built' && isFinite(e.x) && isFinite(e.y)) r.effect('built', e.x, e.y);
     }
   }
-  function districtCleared() {
-    splits.push(Math.round((world.time + world.penaltyTime) * 1000));
-    drag = null;
-    preview = null;
-    if (li >= L.LEVELS.length - 1) finishRun();
-    else { phase = 'transition'; trans = 0; }
+  function stepAnim(now) {
+    var k = clamp((now - anim.t0) / anim.dur, 0, 1);
+    var e = 1 - Math.pow(1 - k, 3);
+    var s = anim.s0 * Math.pow(anim.s1 / anim.s0, e);
+    if (anim.w) zoomAround(anim.w, anim.cx, anim.cy, s);
+    else r.setCamera(anim.x0 + (anim.x1 - anim.x0) * e, anim.y0 + (anim.y1 - anim.y0) * e, s);
+    if (k >= 1) anim = null;
   }
   function frame(now) {
     root.requestAnimationFrame(frame);
@@ -316,145 +488,198 @@
     lastNow = now;
     skipDt = hidden;
     if (hidden) return;
-    if (phase === 'play') {
-      if (clockOn) {
-        acc += dt;
-        while (acc >= S.DT && !world.cleared) { S.step(world, S.DT); acc -= S.DT; }
-      }
-      drain();
-      if (phase === 'play' && world.cleared) districtCleared();
+    if (phase === 'play' && !paused) {
+      acc += dt * S.TIME_SCALE * speed;
+      while (acc >= S.DT && !city.done) { S.step(city, S.DT); acc -= S.DT; }
     }
-    if (phase === 'transition') {
-      trans += dt * 1000;
-      if (trans >= TRANSITION_MS) { newWorld(li + 1); phase = 'play'; }
-    }
-    waterGlow = Math.max(0, waterGlow - dt);
-    if (phase === 'transition') r.drawTransition(L.LEVELS, li, li + 1, Math.min(1, trans / TRANSITION_MS));
-    else r.draw(world, { preview: preview, waterGlow: waterGlow, lang: lang, now: now });
+    if (anim) stepAnim(now);
+    drain();
+    if (phase === 'play' && city.done) finishRun();
+    if (now - hotAt >= 500) updateHot(now);
+    if (now - tickAt >= 250) { tickAt = now; tick(); }
+    view.now = now;
+    view.lang = lang;
+    r.draw(city, view);
+    placeCard();
     updateHud();
   }
 
-  function walk(a, b, xFirst) {
-    var W = S.W;
-    var ax = a % W;
-    var ay = (a - ax) / W;
-    var bx = b % W;
-    var by = (b - bx) / W;
-    var out = [];
-    var stepX = function () { while (ax !== bx) { ax += ax < bx ? 1 : -1; out.push(ay * W + ax); } };
-    var stepY = function () { while (ay !== by) { ay += ay < by ? 1 : -1; out.push(ay * W + ax); } };
-    if (xFirst) { stepX(); stepY(); } else { stepY(); stepX(); }
-    return out;
+  function anchor(w, cx, cy) {
+    var p = r.worldToScreen(w.x, w.y);
+    var c = r.getCamera();
+    r.setCamera(c.x + (p.x - cx) / c.scale, c.y + (p.y - cy) / c.scale, c.scale);
   }
-  function passable(path) {
-    for (var i = 0; i < path.length; i++) {
-      var k = world.kind[path[i]];
-      if (k === S.K.RIVER || k === S.K.RAIL || k === S.K.BLOCK) return false;
-    }
-    return true;
+  function zoomAround(w, cx, cy, s) {
+    var c = r.getCamera();
+    r.setCamera(c.x, c.y, s);
+    anchor(w, cx, cy);
   }
-  function fill(a, b, xFirst) {
-    var first = walk(a, b, xFirst);
-    if (passable(first)) return first;
-    var second = walk(a, b, !xFirst);
-    return passable(second) ? second : first;
+  function pts() {
+    var a = [];
+    for (var k in ptrs) a.push(ptrs[k]);
+    return a;
   }
-  function eraseTile(tile) {
-    S.eraseAt(world, tile);
-    refreshTools();
+  function beginPinch() {
+    var p = pts();
+    var mx = (p[0].x + p[1].x) / 2;
+    var my = (p[0].y + p[1].y) / 2;
+    gest = { mode: 'pinch', d0: Math.max(10, Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)), s0: r.getCamera().scale, w: r.screenToWorld(mx, my) };
+  }
+  function resetGesture() {
+    ptrs = {};
+    gest = null;
   }
   function onDown(e) {
-    if (phase !== 'play') return;
-    if (drag && !e.isPrimary) return;
-    clockOn = true;
-    var tile = r.tileAt(e.clientX, e.clientY);
+    if (phase !== 'play' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    anim = null;
     try { cv.setPointerCapture(e.pointerId); } catch (x) {}
-    drag = { id: e.pointerId, last: tile, s: tile, dead: false, axis: 'x' };
-    preview = null;
-    if (tile >= 0 && tool === 'erase') eraseTile(tile);
+    ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var n = pts().length;
+    if (n === 1) gest = { mode: 'tap', sx: e.clientX, sy: e.clientY, w: r.screenToWorld(e.clientX, e.clientY) };
+    else if (n === 2) beginPinch();
   }
   function onMove(e) {
-    if (!drag || e.pointerId !== drag.id || phase !== 'play') return;
-    var tile = r.tileAt(e.clientX, e.clientY);
-    if (tile < 0 || tile === drag.last) return;
-    if (tool === 'bridge') {
-      if (drag.s < 0) drag.s = tile;
-      drag.last = tile;
-      preview = tile === drag.s ? null : { s: drag.s, e: tile, ok: S.bridgeCheck(world, drag.s, tile).ok };
+    var q = ptrs[e.pointerId];
+    if (!q || !gest) return;
+    q.x = e.clientX;
+    q.y = e.clientY;
+    if (gest.mode === 'pinch') {
+      var p = pts();
+      if (p.length < 2) return;
+      var d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      zoomAround(gest.w, (p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2, gest.s0 * d / gest.d0);
       return;
     }
-    var from = drag.last;
-    drag.last = tile;
-    if (from < 0) { if (tool === 'erase') eraseTile(tile); return; }
-    var dx = Math.abs((tile % S.W) - (from % S.W));
-    var dy = Math.abs(((tile / S.W) | 0) - ((from / S.W) | 0));
-    var path = fill(from, tile, dx && dy ? drag.axis !== 'y' : dx > 0);
-    drag.axis = dx >= dy ? 'x' : 'y';
-    if (tool === 'erase') { path.forEach(eraseTile); return; }
-    if (drag.dead) return;
-    var res = S.roadStroke(world, [from].concat(path));
-    if (res && res.stop) { drag.dead = true; bump(res.stop); }
-    refreshTools();
+    if (gest.mode === 'tap') {
+      if (Math.hypot(q.x - gest.sx, q.y - gest.sy) < SLOP_PX) return;
+      gest.mode = 'pan';
+    }
+    anchor(gest.w, q.x, q.y);
   }
   function onUp(e) {
-    if (!drag || e.pointerId !== drag.id) return;
-    if (tool === 'bridge' && preview && phase === 'play') {
-      var res = S.placeBridge(world, preview.s, preview.e);
-      if (!res || !res.ok) bump(res && res.reason);
-      refreshTools();
-    }
-    drag = null;
-    preview = null;
+    if (!ptrs[e.pointerId]) return;
+    delete ptrs[e.pointerId];
+    var p = pts();
+    if (gest && gest.mode === 'tap' && !p.length && e.type === 'pointerup' && phase === 'play') tap(e.clientX, e.clientY);
+    if (!p.length) gest = null;
+    else if (p.length === 1) gest = { mode: 'pan', w: r.screenToWorld(p[0].x, p[0].y) };
+    else beginPinch();
   }
-  function onCancel(e) {
-    if (drag && e.pointerId === drag.id) { drag = null; preview = null; }
+  function onWheel(e) {
+    e.preventDefault();
+    if (phase !== 'play') return;
+    anim = null;
+    var dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+    zoomAround(r.screenToWorld(e.clientX, e.clientY), e.clientX, e.clientY, r.getCamera().scale * Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)));
+  }
+  function tap(cx, cy) {
+    var now = root.performance.now();
+    if (lastTap && now - lastTap.t < DOUBLE_MS && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 30) {
+      lastTap = null;
+      if (mode !== 'road') closeCard();
+      var c = r.getCamera();
+      anim = { t0: now, dur: 260, s0: c.scale, s1: c.scale * 2, w: r.screenToWorld(cx, cy), cx: cx, cy: cy };
+      return;
+    }
+    lastTap = { t: now, x: cx, y: cy };
+    pick(cx, cy);
+  }
+  function pick(cx, cy) {
+    var w = r.screenToWorld(cx, cy);
+    var s = r.getCamera().scale;
+    if (mode === 'road') { roadPick(w, s); return; }
+    if (sel) { closeCard(); return; }
+    var n = S.nearestNode(city, w.x, w.y, NODE_PX / s, true);
+    if (n >= 0) { blip(); openCard('node', n); return; }
+    var e = S.nearestEdge(city, w.x, w.y, EDGE_PX / s);
+    if (e >= 0) { blip(); openCard('edge', e, w.x, w.y); }
+  }
+  function roadPick(w, s) {
+    var n = S.nearestNode(city, w.x, w.y, NODE_PX / s, false);
+    if (n < 0) return;
+    blip();
+    if (road.a < 0) road.a = n;
+    else road.b = n;
+    hint();
+    if (road.b >= 0) openCard('road', n);
+    else syncView();
+  }
+
+  function newCity() {
+    city = S.createCity(root.UBMap, root.UBScenario);
+    phase = 'play';
+    acc = 0;
+    fixes = 0;
+    trail = [];
+    hot = [];
+    view.hot = hot;
+    hotAt = -1e9;
+    hotIdx = -1;
+    hotTop = -1;
+    anim = null;
+    lastTap = null;
+    resetGesture();
+    setMode('');
+    setPause(false);
+    r.clearEffects();
+    r.fitCity(city);
+    $('end').hidden = true;
+    updateHud();
+    tick();
   }
 
   function finishRun() {
     phase = 'end';
-    markDots(L.LEVELS.length);
-    var ms = sum(splits);
+    setMode('');
+    resetGesture();
+    anim = null;
     current = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      uid: userId, ms: ms, secs: Math.round(ms / 1000), splits: splits.slice()
+      uid: userId,
+      score: Math.max(0, Math.round(Number(city.score) || 0)),
+      spent: Math.round((Number(city.spent) || 0) * 10) / 10,
+      fixes: fixes,
+      oddEven: !!city.oddEven
     };
     var res = current;
     saveState = lbApi('submit') ? 'saving' : 'failed';
     saveInfo = null;
     newRecord = false;
-    bestMs = 0;
+    bestScore = null;
     tab = 'friends';
     $('end').hidden = false;
+    fanfare();
+    refreshCtl();
     renderEnd();
     evalBest(res);
     writePending(res).then(function () { saveRun(res); });
     loadBoard();
   }
   function evalBest(res) {
-    sGet('best').then(function (b) {
+    sGet('best2').then(function (b) {
       if (res !== current) return;
       if (b && b.id === res.id) return;
-      var prev = b && typeof b.ms === 'number' ? b.ms : 0;
-      var better = !prev || res.ms < prev;
-      bestMs = better ? res.ms : prev;
+      var prev = b && typeof b.score === 'number' ? b.score : null;
+      var better = prev == null ? res.score > 0 : res.score > prev;
+      bestScore = better ? res.score : prev;
       if (!(res.saved && saveInfo)) newRecord = better;
-      if (better) sSet('best', { id: res.id, ms: res.ms, splits: res.splits });
+      if (better) sSet('best2', { id: res.id, score: res.score });
       renderEnd();
     });
   }
   function pendingOf(res) {
-    return { id: res.id, uid: res.uid, ms: res.ms, secs: res.secs, splits: res.splits };
+    return { id: res.id, uid: res.uid, score: res.score, spent: res.spent, fixes: res.fixes };
   }
   function writePending(res) {
-    return sGet('pending').then(function (p) {
-      if (p && p.uid === res.uid && p.id !== res.id && p.ms <= res.ms) return;
-      return sSet('pending', pendingOf(res));
+    return sGet('pending2').then(function (p) {
+      if (p && p.uid === res.uid && p.id !== res.id && typeof p.score === 'number' && p.score >= res.score) return;
+      return sSet('pending2', pendingOf(res));
     });
   }
   function clearPendingAfter(res) {
-    return sGet('pending').then(function (p) {
+    return sGet('pending2').then(function (p) {
       if (!p) return;
-      if (p.id === res.id || p.ms >= res.ms) return sSet('pending', null);
+      if (p.id === res.id || !(p.score > res.score)) return sSet('pending2', null);
       flushPending();
     });
   }
@@ -462,7 +687,7 @@
     var l = lbApi('submit');
     if (!l) return Promise.reject({ code: 'UNAVAILABLE' });
     return timed(attempt(function () {
-      return Usion.leaderboard.submit(res.secs, { ms: res.ms, splits: res.splits });
+      return Usion.leaderboard.submit(res.score, { spent: res.spent, fixes: res.fixes });
     }), 15000).then(function (a) {
       return a && a.success === true ? a : Promise.reject({ code: 'NOT_ACKED' });
     });
@@ -481,7 +706,7 @@
     submit(res).then(function (a) {
       saving = null;
       res.saved = true;
-      if (res === current && typeof a.best === 'number') newRecord = a.previous == null || res.secs < a.previous;
+      if (res === current && typeof a.best === 'number') newRecord = a.previous == null || res.score > a.previous;
       setSave(res, 'saved', a);
       clearPendingAfter(res);
       if (res === current && phase === 'end') loadBoard();
@@ -494,35 +719,23 @@
     if (flushing || !userId || /^guest_/.test(userId) || !lbApi('submit')) return;
     flushing = true;
     var done = function () { flushing = false; };
-    sGet('pending').then(function (p) {
-      if (!p || p.uid !== userId || (current && p.id === current.id)) return;
+    sGet('pending2').then(function (p) {
+      if (!p || p.uid !== userId || typeof p.score !== 'number' || (current && p.id === current.id)) return;
       return submit(p).then(function () { return clearPendingAfter(p); });
     }).then(done, done);
   }
 
   function renderEnd() {
     if (!current) return;
-    setText($('endTotal'), fmt(current.ms));
+    setText($('endTotal'), kmh(current.score));
     var rec = $('endRec');
     rec.hidden = !newRecord;
     setText(rec, t.record);
-    var bt = bestMs ? fmt(bestMs) : '';
-    var sb = saveInfo && typeof saveInfo.best === 'number' ? saveInfo.best : null;
-    if (sb !== null && Math.round(bestMs / 1000) !== sb) bt = fmtSec(sb);
-    setText($('endBest'), bt ? t.best + ' ' + bt : '');
-    var ol = $('endSplits');
-    ol.textContent = '';
-    for (var i = 0; i < current.splits.length; i++) {
-      var lv = L.LEVELS[i];
-      var row = doc.createElement('li');
-      var nm = doc.createElement('span');
-      var tm = doc.createElement('b');
-      nm.textContent = (i + 1) + '. ' + ((lv && lv.name && (lv.name[lang] || lv.name.mn)) || '');
-      tm.textContent = fmt(current.splits[i]);
-      row.appendChild(nm);
-      row.appendChild(tm);
-      ol.appendChild(row);
-    }
+    var b = saveInfo && typeof saveInfo.best === 'number' ? saveInfo.best : bestScore;
+    setText($('endBest'), !newRecord && b != null ? t.best + ' ' + kmh(b) : '');
+    setText($('fFix'), String(current.fixes));
+    setText($('fSpent'), '💰' + fmtCost(current.spent));
+    setText($('fOdd'), current.oddEven ? '✓' : '—');
     var txt = { saving: t.saving, saved: t.saved, failed: t.failed, guest: t.guest }[saveState] || '';
     if (saveState === 'saved' && saveInfo && saveInfo.rank) txt += ' · #' + saveInfo.rank;
     setText($('saveText'), txt);
@@ -579,14 +792,14 @@
     nm.className = 'nm';
     nm.textContent = name;
     sc.className = 'sc';
-    sc.textContent = fmtSec(e.score);
+    sc.textContent = kmh(e.score);
     el.appendChild(rk);
     el.appendChild(av);
     el.appendChild(nm);
     el.appendChild(sc);
     if (!me) {
       el.type = 'button';
-      el.setAttribute('aria-label', rank + '. ' + name + ', ' + fmtSec(e.score));
+      el.setAttribute('aria-label', rank + '. ' + name + ', ' + kmh(e.score));
       el.addEventListener('click', function () { openProfile(e.user_id); });
     }
     return el;
@@ -619,72 +832,72 @@
   }
 
   function onResize() {
+    if (!city) { r.resize(); return; }
+    var c = r.getCamera();
     r.resize();
-    if (world) r.fit(world);
+    r.fitCity(city);
+    if (c && c.scale > r.getCamera().scale * 1.01) r.setCamera(c.x, c.y, c.scale);
   }
   function bind() {
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
     root.addEventListener('pointerup', onUp);
-    root.addEventListener('pointercancel', onCancel);
+    root.addEventListener('pointercancel', onUp);
+    cv.addEventListener('lostpointercapture', onUp);
+    cv.addEventListener('wheel', onWheel, { passive: false });
     cv.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-    cv.addEventListener('animationend', function () { cv.classList.remove('shake'); });
     ['pointerdown', 'pointerup', 'touchend', 'click'].forEach(function (n) { doc.addEventListener(n, audio, true); });
-    cv.addEventListener('lostpointercapture', onCancel);
-    root.addEventListener('blur', function () { drag = null; preview = null; });
-    doc.addEventListener('visibilitychange', function () { skipDt = true; drag = null; preview = null; });
-    TOOLS.forEach(function (n) {
-      var b = $('tool-' + n);
-      b.addEventListener('click', function () { if (!drag) setTool(n); });
-      b.addEventListener('animationend', function () { b.classList.remove('pulse'); });
+    root.addEventListener('blur', resetGesture);
+    doc.addEventListener('visibilitychange', function () { skipDt = true; resetGesture(); });
+    doc.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || phase !== 'play') return;
+      if (mode) setMode('');
+      else closeCard();
     });
-    $('restart').addEventListener('click', onRestart);
-    $('again').addEventListener('click', restartRun);
+    $('speed').addEventListener('click', function () { setSpeed(speed === 1 ? 3 : 1); });
+    $('pause').addEventListener('click', function () { setPause(!paused); });
+    $('roadBtn').addEventListener('click', function () { if (phase === 'play') setMode(mode === 'road' ? '' : 'road'); });
+    $('oddBtn').addEventListener('click', function () { doAct({ type: 'oddeven' }); });
+    $('hotBtn').addEventListener('click', nextHot);
+    $('bud').addEventListener('animationend', function () { $('bud').classList.remove('low'); });
+    card.addEventListener('animationend', function () { card.classList.remove('in'); });
+    $('again').addEventListener('click', newCity);
     $('retry').addEventListener('click', function () { saveRun(current); });
     $('tabF').addEventListener('click', function () { showTab('friends'); });
     $('tabG').addEventListener('click', function () { showTab('global'); });
     root.addEventListener('resize', onResize);
-    if (typeof root.ResizeObserver === 'function') new root.ResizeObserver(onResize).observe($('stage'));
+    if (typeof root.ResizeObserver === 'function') new root.ResizeObserver(onResize).observe(stage);
   }
 
   function installTest() {
     root.UBT = {
-      world: function () { return world; },
-      levelIndex: function () { return li; },
+      city: function () { return city; },
       state: function () { return phase; },
-      tileXY: function (tile) {
-        var b = cv.getBoundingClientRect();
-        var sx = 0, sy = 0, n = 0;
-        for (var y = b.top; y < b.bottom; y += 2) {
-          for (var x = b.left; x < b.right; x += 2) {
-            if (r.tileAt(x, y) === tile) { sx += x; sy += y; n++; }
-          }
-        }
-        return n ? { x: sx / n, y: sy / n } : null;
-      },
-      finishDistrict: function () {
+      finishNow: function () {
         if (phase !== 'play') return false;
-        for (var c = 0; c < world.quota.length; c++) world.delivered[c] = world.quota[c];
-        world.cleared = true;
-        world.events.push({ type: 'cleared' });
+        var guard = Math.ceil((city.end - city.time) / S.DT) + 100;
+        while (!city.done && guard-- > 0) S.step(city, S.DT);
         drain();
-        return true;
-      }
+        if (city.done) finishRun();
+        return !!city.done;
+      },
+      act: function (a) { return doAct(a); }
     };
   }
 
   function start() {
     if (started) return;
     started = true;
-    L = root.UBLevels;
     S = root.Sim;
     cv = $('cv');
+    stage = $('stage');
+    card = $('card');
     r = root.Render.create(cv);
     bind();
-    applyHost();
     r.resize();
-    restartRun();
+    newCity();
+    applyHost();
     if (/[?&]test=1(&|$)/.test(String(root.location.search)) && root.__UBT_TEST === true) installTest();
     root.requestAnimationFrame(frame);
   }
