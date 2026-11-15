@@ -1,0 +1,11 @@
+{
+  "name": "УБ Түгжрэл",
+  "description": "Улаанбаатарын түгжрэлийг өөрөө зам, гүүр барьж шийд. 5 дүүргийг хамгийн хурдан туулсан хүн тэргүүлнэ.",
+  "service_type": "game",
+  "cost": 0,
+  "tags": ["game", "iframe"],
+  "genre": "puzzle",
+  "max_players": 1,
+  "is_published": true,
+  "leaderboard": {"enabled": true, "order": "asc"}
+}
