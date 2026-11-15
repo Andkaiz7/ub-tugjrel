@@ -176,7 +176,7 @@
   function updateHud() {
     var ms = phase === 'end' && current ? current.ms : sum(splits) + (phase === 'play' ? (world.time + world.penaltyTime) * 1000 : 0);
     setText($('clock'), fmt(ms));
-    if (phase !== 'play') return;
+    if (phase === 'transition') return;
     for (var c = 0; c < pills.length; c++) {
       var q = world.quota[c];
       var d = Math.min(world.delivered[c], q);
