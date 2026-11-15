@@ -91,6 +91,7 @@
       _cap: cap,
       _lq: [],
       _lcount: new Int32Array(cap * 2),
+      _lslow: new Float64Array(cap * 2),
       _lstore: new Float64Array(cap * 2),
       _lflow: new Float64Array(cap * 2),
       _ltok: new Float64Array(cap * 2),
@@ -367,15 +368,19 @@
       var v = city._lvf[l] * dt;
       var gap = len / city._lstore[l];
       var front = len + gap;
+      var slow = 0;
       for (var i = 0; i < q.length; i++) {
         var a = q[i];
         var target = Math.min(a.s + v, front - gap, len);
-        if (target > a.s) {
-          city._meters += target - a.s;
+        var moved = target > a.s ? target - a.s : 0;
+        if (moved) {
+          city._meters += moved;
           a.s = target;
         }
+        if (moved < v * 0.3) slow++;
         front = a.s;
       }
+      city._lslow[l] = city._lslow[l] * 0.9 + (slow / q.length) * Math.min(1, q.length / 2) * 0.1;
     }
   }
 
@@ -514,9 +519,8 @@
   function linkLoad(city, l) {
     if (!city._lexists[l]) return 0;
     var occ = city._lcount[l] / city._lstore[l];
-    var q = city._lq[l];
-    var head = q.length ? q[0].wait : 0;
-    return Math.min(1, Math.max(occ * 1.15, head > 20 ? 0.55 + Math.min(0.45, head / 300) : 0));
+    if (!city._lq[l].length) city._lslow[l] *= 0.98;
+    return Math.min(1, Math.max(occ * 1.15, city._lslow[l]));
   }
 
   function edgeLoad(city, e) {
