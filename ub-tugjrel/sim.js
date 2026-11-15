@@ -54,7 +54,7 @@
         chars[i] = ch;
         if (ch === '~') kind[i] = K.RIVER;
         else if (ch === '=') kind[i] = K.RAIL;
-        else if (ch === '#') kind[i] = K.BLOCK;
+        else if (ch === '#' || (ch >= 'F' && ch <= 'Z')) kind[i] = K.BLOCK;
         else if (ch === '+') prebuilt[i] = 1;
         else if (ch >= 'A' && ch <= 'E') {
           kind[i] = K.SRC;
