@@ -4,8 +4,8 @@
   "service_type": "game",
   "cost": 0,
   "tags": ["game", "iframe"],
-  "genre": "puzzle",
+  "genre": "strategy",
   "max_players": 1,
-  "is_published": true,
+  "is_published": false,
   "leaderboard": {"enabled": true, "order": "asc"}
 }
