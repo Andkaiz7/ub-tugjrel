@@ -1,0 +1,289 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#100826}canvas{display:block}</style></head>
+<body><canvas id="c" width="512" height="512"></canvas>
+<script>
+const c = document.getElementById('c');
+const g = c.getContext('2d');
+
+const bg = g.createLinearGradient(0, 0, 0, 512);
+bg.addColorStop(0, '#12082b');
+bg.addColorStop(0.55, '#251156');
+bg.addColorStop(1, '#110726');
+g.fillStyle = bg;
+g.fillRect(0, 0, 512, 512);
+
+const glow = g.createRadialGradient(256, 210, 24, 256, 220, 320);
+glow.addColorStop(0, 'rgba(139, 92, 246, 0.45)');
+glow.addColorStop(0.55, 'rgba(88, 28, 135, 0.2)');
+glow.addColorStop(1, 'rgba(18, 8, 41, 0)');
+g.fillStyle = glow;
+g.fillRect(0, 0, 512, 512);
+
+function drawCone(topHalfW, botHalfW, alphaTop, alphaMid) {
+  const cone = g.createLinearGradient(256, -20, 256, 512);
+  cone.addColorStop(0, `rgba(255, 244, 200, ${alphaTop})`);
+  cone.addColorStop(0.48, `rgba(253, 224, 138, ${alphaMid})`);
+  cone.addColorStop(1, 'rgba(167, 139, 250, 0)');
+  g.fillStyle = cone;
+  g.beginPath();
+  g.moveTo(256 - topHalfW, -20);
+  g.lineTo(256 + topHalfW, -20);
+  g.lineTo(256 + botHalfW, 512);
+  g.lineTo(256 - botHalfW, 512);
+  g.closePath();
+  g.fill();
+}
+
+g.save();
+g.filter = 'blur(18px)';
+drawCone(64, 265, 0.3, 0.14);
+g.restore();
+drawCone(44, 195, 0.22, 0.08);
+
+const floorGlow = g.createRadialGradient(256, 455, 20, 256, 455, 220);
+floorGlow.addColorStop(0, 'rgba(251, 191, 36, 0.24)');
+floorGlow.addColorStop(0.5, 'rgba(168, 85, 247, 0.16)');
+floorGlow.addColorStop(1, 'rgba(18, 8, 41, 0)');
+g.fillStyle = floorGlow;
+g.fillRect(0, 290, 512, 222);
+
+g.save();
+g.fillStyle = 'rgba(8, 3, 22, 0.48)';
+g.beginPath();
+g.roundRect(184, 64, 160, 214, 80);
+g.fill();
+g.restore();
+
+const poleGrad = g.createLinearGradient(242, 0, 270, 0);
+poleGrad.addColorStop(0, '#475569');
+poleGrad.addColorStop(0.32, '#f8fafc');
+poleGrad.addColorStop(0.65, '#94a3b8');
+poleGrad.addColorStop(1, '#334155');
+g.fillStyle = poleGrad;
+g.fillRect(243, 314, 26, 198);
+
+g.save();
+g.lineCap = 'round';
+g.lineWidth = 16;
+const yokeGrad = g.createLinearGradient(156, 160, 356, 305);
+yokeGrad.addColorStop(0, '#94a3b8');
+yokeGrad.addColorStop(0.3, '#f8fafc');
+yokeGrad.addColorStop(0.65, '#cbd5e1');
+yokeGrad.addColorStop(1, '#475569');
+g.strokeStyle = yokeGrad;
+g.beginPath();
+g.moveTo(160, 164);
+g.lineTo(160, 204);
+g.arc(256, 204, 96, Math.PI, 0, true);
+g.lineTo(352, 164);
+g.stroke();
+g.restore();
+
+g.fillStyle = '#334155';
+g.beginPath();
+g.roundRect(231, 296, 50, 24, 10);
+g.fill();
+const collarGrad = g.createLinearGradient(231, 296, 281, 296);
+collarGrad.addColorStop(0, '#64748b');
+collarGrad.addColorStop(0.38, '#f8fafc');
+collarGrad.addColorStop(1, '#475569');
+g.fillStyle = collarGrad;
+g.beginPath();
+g.roundRect(233, 298, 46, 18, 8);
+g.fill();
+
+for (const sx of [154, 358]) {
+  const knob = g.createRadialGradient(sx - 3, 160, 2, sx, 164, 15);
+  knob.addColorStop(0, '#ffffff');
+  knob.addColorStop(0.55, '#cbd5e1');
+  knob.addColorStop(1, '#475569');
+  g.fillStyle = knob;
+  g.beginPath();
+  g.arc(sx, 164, 13, 0, Math.PI * 2);
+  g.fill();
+}
+
+const micShell = g.createLinearGradient(174, 52, 338, 268);
+micShell.addColorStop(0, '#e2e8f0');
+micShell.addColorStop(0.22, '#ffffff');
+micShell.addColorStop(0.5, '#cbd5e1');
+micShell.addColorStop(0.8, '#64748b');
+micShell.addColorStop(1, '#94a3b8');
+g.fillStyle = micShell;
+g.beginPath();
+g.roundRect(178, 50, 156, 214, 78);
+g.fill();
+
+g.strokeStyle = '#334155';
+g.lineWidth = 4;
+g.stroke();
+
+g.save();
+g.beginPath();
+g.roundRect(192, 64, 128, 186, 64);
+g.clip();
+
+const grilleBg = g.createLinearGradient(192, 64, 320, 250);
+grilleBg.addColorStop(0, '#1e163d');
+grilleBg.addColorStop(0.5, '#31235c');
+grilleBg.addColorStop(1, '#140e2b');
+g.fillStyle = grilleBg;
+g.fillRect(192, 64, 128, 186);
+
+const slatGrad = g.createLinearGradient(192, 0, 320, 0);
+slatGrad.addColorStop(0, '#64748b');
+slatGrad.addColorStop(0.32, '#f8fafc');
+slatGrad.addColorStop(0.6, '#cbd5e1');
+slatGrad.addColorStop(1, '#475569');
+g.fillStyle = slatGrad;
+for (let y = 88; y <= 228; y += 28) {
+  g.fillRect(192, y, 128, 11);
+}
+
+const spineGrad = g.createLinearGradient(246, 64, 266, 64);
+spineGrad.addColorStop(0, '#64748b');
+spineGrad.addColorStop(0.45, '#ffffff');
+spineGrad.addColorStop(1, '#475569');
+g.fillStyle = spineGrad;
+g.fillRect(247, 64, 18, 186);
+
+const micHighlight = g.createLinearGradient(196, 68, 240, 200);
+micHighlight.addColorStop(0, 'rgba(255, 255, 255, 0.34)');
+micHighlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+g.fillStyle = micHighlight;
+g.beginPath();
+g.ellipse(222, 124, 24, 52, -0.18, 0, Math.PI * 2);
+g.fill();
+g.restore();
+
+function drawGoldTile(cx, cy, w, h, rot, label) {
+  g.save();
+  g.translate(cx, cy);
+  g.rotate(rot);
+
+  g.fillStyle = 'rgba(9, 4, 24, 0.5)';
+  g.beginPath();
+  g.roundRect(-w / 2 + 4, -h / 2 + 18, w, h, 22);
+  g.fill();
+
+  const depthGrad = g.createLinearGradient(-w / 2, 0, w / 2, 0);
+  depthGrad.addColorStop(0, '#b45309');
+  depthGrad.addColorStop(0.5, '#d97706');
+  depthGrad.addColorStop(1, '#92400e');
+  g.fillStyle = depthGrad;
+  g.beginPath();
+  g.roundRect(-w / 2, -h / 2 + 13, w, h, 22);
+  g.fill();
+
+  const faceGrad = g.createLinearGradient(0, -h / 2, 0, h / 2);
+  faceGrad.addColorStop(0, '#fff3b0');
+  faceGrad.addColorStop(0.22, '#fcd34d');
+  faceGrad.addColorStop(0.75, '#f59e0b');
+  faceGrad.addColorStop(1, '#d97706');
+  g.fillStyle = faceGrad;
+  g.beginPath();
+  g.roundRect(-w / 2, -h / 2, w, h, 22);
+  g.fill();
+
+  g.strokeStyle = 'rgba(255, 251, 235, 0.85)';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.roundRect(-w / 2 + 2, -h / 2 + 2, w - 4, h - 4, 20);
+  g.stroke();
+
+  g.fillStyle = 'rgba(255, 255, 255, 0.36)';
+  g.beginPath();
+  g.roundRect(-w / 2 + 12, -h / 2 + 8, w - 24, 16, 8);
+  g.fill();
+
+  if (label) {
+    g.fillStyle = '#451a03';
+    g.font = '900 54px system-ui, -apple-system, "Segoe UI", sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(label, 0, 4);
+  } else {
+    g.save();
+    g.beginPath();
+    g.roundRect(-w / 2, -h / 2, w, h, 22);
+    g.clip();
+    g.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    g.beginPath();
+    g.moveTo(-w / 2 - 10, h / 2);
+    g.lineTo(-w / 2 + 34, -h / 2);
+    g.lineTo(-w / 2 + 64, -h / 2);
+    g.lineTo(-w / 2 + 20, h / 2);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+
+  g.restore();
+}
+
+function drawEmptyTile(cx, cy, w, h) {
+  g.save();
+  g.translate(cx, cy);
+
+  g.fillStyle = 'rgba(7, 3, 20, 0.62)';
+  g.beginPath();
+  g.roundRect(-w / 2, -h / 2 + 10, w, h, 24);
+  g.fill();
+
+  const slotGrad = g.createLinearGradient(0, -h / 2, 0, h / 2);
+  slotGrad.addColorStop(0, '#1e1042');
+  slotGrad.addColorStop(1, '#2f1966');
+  g.fillStyle = slotGrad;
+  g.beginPath();
+  g.roundRect(-w / 2, -h / 2, w, h, 24);
+  g.fill();
+
+  g.strokeStyle = '#fde047';
+  g.lineWidth = 8;
+  g.setLineDash([16, 12]);
+  g.lineCap = 'round';
+  g.beginPath();
+  g.roundRect(-w / 2 + 5, -h / 2 + 5, w - 10, h - 10, 20);
+  g.stroke();
+  g.setLineDash([]);
+
+  g.shadowColor = 'rgba(251, 191, 36, 0.72)';
+  g.shadowBlur = 16;
+  g.fillStyle = '#fef08a';
+  g.font = '900 72px system-ui, -apple-system, "Segoe UI", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('?', 0, 5);
+
+  g.restore();
+}
+
+drawGoldTile(112, 354, 130, 94, -0.11, 'үг');
+drawGoldTile(400, 354, 130, 94, 0.11, '');
+drawEmptyTile(256, 402, 148, 108);
+
+function sparkle(x, y, r, color) {
+  g.save();
+  g.translate(x, y);
+  g.shadowColor = color;
+  g.shadowBlur = 12;
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(0, -r);
+  g.quadraticCurveTo(r * 0.16, -r * 0.16, r, 0);
+  g.quadraticCurveTo(r * 0.16, r * 0.16, 0, r);
+  g.quadraticCurveTo(-r * 0.16, r * 0.16, -r, 0);
+  g.quadraticCurveTo(-r * 0.16, -r * 0.16, 0, -r);
+  g.closePath();
+  g.fill();
+  g.restore();
+}
+
+sparkle(92, 114, 22, '#fef08a');
+sparkle(420, 144, 26, '#ffffff');
+sparkle(384, 88, 13, '#fde68a');
+sparkle(134, 234, 14, '#fef9c3');
+sparkle(442, 262, 16, '#fde047');
+sparkle(68, 270, 10, '#ffffff');
+
+window.done = true;
+</script></body></html>
