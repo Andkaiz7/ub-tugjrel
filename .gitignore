@@ -5,3 +5,4 @@ __pycache__/
 *.log
 credentials.env
 release/deployment*.json
+tools/osm-buildings-cache.json

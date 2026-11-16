@@ -9,6 +9,15 @@
   var SAT_BASE_Z = 11;
   var SAT_MAX_Z = 18;
   var SAT_KEEP = 360;
+  var BLD_MIN_SCALE = 0.1;
+  var BLD_FULL_SCALE = 0.15;
+  var BLD_CELL = 300;
+  var BLD_K = 1.1;
+  var BLD_SUN_X = 0.42;
+  var BLD_SUN_Y = 0.22;
+  var BLD_ROOFS = ['#e9e4da', '#dcdfe3', '#d2d9de', '#e3d6c6', '#d6dccd', '#d9d5cd'];
+  var BLD_TOWER = '#b8c7d6';
+  var BLD_TIN = ['#4f9d69', '#c8553d', '#3d7cc9', '#d9a441', '#5aa6a0'];
 
   var LOAD_STOPS = [
     [0.00, 34, 197, 94],
@@ -73,6 +82,29 @@
     if (typeof UBArtPlaces !== 'undefined') return UBArtPlaces;
     return null;
   }
+
+  function getBuildings() {
+    if (root && typeof root.UBBuildings !== 'undefined') return root.UBBuildings;
+    if (typeof UBBuildings !== 'undefined') return UBBuildings;
+    return null;
+  }
+
+  function shadeHex(hex, f) {
+    var v = parseInt(hex.slice(1), 16);
+    var r = Math.round(((v >> 16) & 255) * f);
+    var g = Math.round(((v >> 8) & 255) * f);
+    var b = Math.round((v & 255) * f);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  var BLD_PALETTE = (function () {
+    var all = BLD_ROOFS.concat([BLD_TOWER], BLD_TIN);
+    var out = {};
+    for (var i = 0; i < all.length; i++) {
+      out[all[i]] = { light: shadeHex(all[i], 0.8), dark: shadeHex(all[i], 0.6) };
+    }
+    return out;
+  })();
 
   function getArtThings() {
     if (root && typeof root.UBArtThings !== 'undefined') return root.UBArtThings;
@@ -209,9 +241,14 @@
 
   function drawOverpassIcon(ctx, sx, sy, scale) {
     var r = clamp(24 * scale, 6.5, 16);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.32)';
     ctx.beginPath();
-    ctx.arc(sx + 1, sy + 1.5, r, 0, Math.PI * 2);
+    ctx.arc(sx + r * 0.45, sy + r * 0.6, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#64748b';
+    ctx.beginPath();
+    ctx.arc(sx, sy + r * 0.3, r, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = '#cbd5e1';
@@ -293,6 +330,14 @@
 
     var cachedGerRef = null;
     var gerCache = null;
+
+    var bldRef = null;
+    var bld = null;
+    var bldCanvas = null;
+    var bldCtx = null;
+    var bldVis = null;
+    var bldCam = null;
+    var bldAge = 0;
 
     var tiles = {};
     var tileCount = 0;
@@ -770,6 +815,246 @@
           ctx.stroke();
         }
       }
+    }
+
+    function buildBldIndex(src) {
+      var n = src.n | 0;
+      var c = src.c;
+      var p = src.p;
+      var start = new Int32Array(n + 1);
+      for (var i = 0; i < n; i++) start[i + 1] = start[i] + c[i];
+      var xs = new Float32Array(start[n]);
+      var ys = new Float32Array(start[n]);
+      var minX = new Float32Array(n);
+      var minY = new Float32Array(n);
+      var maxX = new Float32Array(n);
+      var maxY = new Float32Array(n);
+      var color = [];
+      var dims = getMapDims();
+      var cols = Math.ceil(dims.w / BLD_CELL) + 1;
+      var rows = Math.ceil(dims.h / BLD_CELL) + 1;
+      var cellOf = new Int32Array(n);
+      var cellCount = new Int32Array(cols * rows + 1);
+      var maxHalf = 0;
+      var maxH = 0;
+      var q = 0;
+      for (i = 0; i < n; i++) {
+        var x = p[q++];
+        var y = p[q++];
+        var k = start[i];
+        var x0 = x, y0 = y, x1 = x, y1 = y;
+        xs[k] = x;
+        ys[k] = y;
+        for (var j = 1; j < c[i]; j++) {
+          x += p[q++];
+          y += p[q++];
+          xs[k + j] = x;
+          ys[k + j] = y;
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+        minX[i] = x0;
+        minY[i] = y0;
+        maxX[i] = x1;
+        maxY[i] = y1;
+        maxHalf = Math.max(maxHalf, (x1 - x0) * 0.5, (y1 - y0) * 0.5);
+        var h = src.h[i];
+        if (h > maxH) maxH = h;
+        var hs = hashInt(i * 7919 + 13);
+        color.push(h >= 45 ? BLD_TOWER : (h <= 5 ? BLD_TIN[hs % BLD_TIN.length] : BLD_ROOFS[hs % BLD_ROOFS.length]));
+        var cx = clamp(Math.floor((x0 + x1) * 0.5 / BLD_CELL), 0, cols - 1);
+        var cy = clamp(Math.floor((y0 + y1) * 0.5 / BLD_CELL), 0, rows - 1);
+        cellOf[i] = cy * cols + cx;
+        cellCount[cellOf[i] + 1]++;
+      }
+      for (i = 0; i < cols * rows; i++) cellCount[i + 1] += cellCount[i];
+      var fill = cellCount.slice(0, cols * rows);
+      var cellItems = new Int32Array(n);
+      for (i = 0; i < n; i++) cellItems[fill[cellOf[i]]++] = i;
+      return {
+        n: n, h: src.h, start: start, xs: xs, ys: ys,
+        minX: minX, minY: minY, maxX: maxX, maxY: maxY, color: color,
+        cols: cols, rows: rows, cellStart: cellCount, cellItems: cellItems,
+        maxHalf: maxHalf, maxH: maxH
+      };
+    }
+
+    function renderBuildings(g, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+      var b = bld;
+      var lift = BLD_K * Math.pow(0.6 / scale, 0.3);
+      var pad = b.maxHalf;
+      var c0 = clamp(Math.floor((viewMinX - pad) / BLD_CELL), 0, b.cols - 1);
+      var c1 = clamp(Math.floor((viewMaxX + pad) / BLD_CELL), 0, b.cols - 1);
+      var r0 = clamp(Math.floor((viewMinY - pad) / BLD_CELL), 0, b.rows - 1);
+      var r1 = clamp(Math.floor((viewMaxY + pad + b.maxH * lift) / BLD_CELL), 0, b.rows - 1);
+      if (!bldVis || bldVis.length < b.n) bldVis = new Int32Array(b.n);
+      var cnt = 0;
+      var minPx = 2.5 / scale;
+      for (var r = r0; r <= r1; r++) {
+        for (var cc = c0; cc <= c1; cc++) {
+          var cell = r * b.cols + cc;
+          for (var ci = b.cellStart[cell]; ci < b.cellStart[cell + 1]; ci++) {
+            var i = b.cellItems[ci];
+            if (b.maxX[i] < viewMinX || b.minX[i] > viewMaxX) continue;
+            if (b.maxY[i] < viewMinY || b.minY[i] - b.h[i] * lift > viewMaxY) continue;
+            if (b.maxX[i] - b.minX[i] < minPx && b.maxY[i] - b.minY[i] < minPx) continue;
+            bldVis[cnt++] = i;
+          }
+        }
+      }
+      if (!cnt) return;
+      var vis = bldVis.subarray(0, cnt);
+      vis.sort();
+      var xs = b.xs;
+      var ys = b.ys;
+      var v, k, k0, k1, ax, ay, bx, by, dx, dy;
+
+      g.fillStyle = 'rgba(6, 10, 18, 0.3)';
+      for (v = 0; v < cnt; v++) {
+        g.beginPath();
+        var si = vis[v];
+        var sl = b.h[si] * scale;
+        var ox = sl * BLD_SUN_X;
+        var oy = sl * BLD_SUN_Y;
+        k0 = b.start[si];
+        k1 = b.start[si + 1];
+        for (k = k0; k < k1; k++) {
+          ax = (xs[k] - camX) * scale + halfW;
+          ay = (ys[k] - camY) * scale + halfH;
+          if (k === k0) g.moveTo(ax + ox, ay + oy);
+          else g.lineTo(ax + ox, ay + oy);
+        }
+        g.closePath();
+        for (k = k0; k < k1; k++) {
+          var kn = k + 1 < k1 ? k + 1 : k0;
+          ax = (xs[k] - camX) * scale + halfW;
+          ay = (ys[k] - camY) * scale + halfH;
+          bx = (xs[kn] - camX) * scale + halfW;
+          by = (ys[kn] - camY) * scale + halfH;
+          if ((bx - ax) * oy - (by - ay) * ox >= 0) {
+            g.moveTo(ax, ay);
+            g.lineTo(bx, by);
+            g.lineTo(bx + ox, by + oy);
+            g.lineTo(ax + ox, ay + oy);
+          } else {
+            g.moveTo(ax, ay);
+            g.lineTo(ax + ox, ay + oy);
+            g.lineTo(bx + ox, by + oy);
+            g.lineTo(bx, by);
+          }
+          g.closePath();
+        }
+        g.fill();
+      }
+
+      var outline = scale > 0.22;
+      g.lineJoin = 'round';
+      g.lineWidth = 1;
+      g.strokeStyle = 'rgba(15, 23, 42, 0.28)';
+      for (v = 0; v < cnt; v++) {
+        var bi = vis[v];
+        var up = b.h[bi] * lift * scale;
+        var pal = BLD_PALETTE[b.color[bi]];
+        k0 = b.start[bi];
+        k1 = b.start[bi + 1];
+        for (var pass = 0; pass < 2; pass++) {
+          g.beginPath();
+          var any = false;
+          for (k = k0; k < k1; k++) {
+            var kk = k + 1 < k1 ? k + 1 : k0;
+            dx = xs[kk] - xs[k];
+            dy = ys[kk] - ys[k];
+            if (dx >= 0) continue;
+            var east = dy > 0 && dy > -dx * 0.4;
+            if ((pass === 1) !== east) continue;
+            ax = (xs[k] - camX) * scale + halfW;
+            ay = (ys[k] - camY) * scale + halfH;
+            bx = (xs[kk] - camX) * scale + halfW;
+            by = (ys[kk] - camY) * scale + halfH;
+            g.moveTo(ax, ay);
+            g.lineTo(bx, by);
+            g.lineTo(bx, by - up);
+            g.lineTo(ax, ay - up);
+            g.closePath();
+            any = true;
+          }
+          if (any) {
+            g.fillStyle = pass === 1 ? pal.dark : pal.light;
+            g.fill();
+          }
+        }
+        g.beginPath();
+        for (k = k0; k < k1; k++) {
+          ax = (xs[k] - camX) * scale + halfW;
+          ay = (ys[k] - camY) * scale + halfH - up;
+          if (k === k0) g.moveTo(ax, ay);
+          else g.lineTo(ax, ay);
+        }
+        g.closePath();
+        g.fillStyle = b.color[bi];
+        g.fill();
+        if (outline) g.stroke();
+      }
+    }
+
+    function drawBuildings(camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+      if (scale < BLD_MIN_SCALE) return;
+      var src = getBuildings();
+      if (!src || !(src.n > 0)) return;
+      if (bldRef !== src) {
+        bldRef = src;
+        bld = buildBldIndex(src);
+        bldCam = null;
+      }
+      var fade = clamp((scale - BLD_MIN_SCALE) / (BLD_FULL_SCALE - BLD_MIN_SCALE), 0, 1);
+      var doc = root && root.document;
+      if (!doc || !doc.createElement) {
+        ctx.save();
+        ctx.globalAlpha = fade;
+        renderBuildings(ctx, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
+        ctx.restore();
+        return;
+      }
+      var mx = Math.round(cssW * 0.2);
+      var my = Math.round(cssH * 0.2);
+      var cw = Math.round((cssW + mx * 2) * dpr);
+      var ch = Math.round((cssH + my * 2) * dpr);
+      if (!bldCanvas) {
+        bldCanvas = doc.createElement('canvas');
+        bldCtx = bldCanvas.getContext('2d');
+      }
+      if (bldCanvas.width !== cw || bldCanvas.height !== ch) {
+        bldCanvas.width = cw;
+        bldCanvas.height = ch;
+        bldCam = null;
+      }
+      bldAge++;
+      var a = 1, bxo = 0, byo = 0, ok = false;
+      if (bldCam && bldCam.dpr === dpr && bldCam.w === cssW && bldCam.h === cssH) {
+        a = scale / bldCam.s;
+        bxo = ((bldCam.x - camX) - (halfW + mx) / bldCam.s) * scale + halfW;
+        byo = ((bldCam.y - camY) - (halfH + my) / bldCam.s) * scale + halfH;
+        var covered = bxo <= 0 && byo <= 0 && bxo + (cssW + mx * 2) * a >= cssW && byo + (cssH + my * 2) * a >= cssH;
+        ok = covered && (a === 1 || (bldAge < 4 && Math.abs(Math.log(a)) < 0.2));
+      }
+      if (!ok) {
+        bldCam = { x: camX, y: camY, s: scale, dpr: dpr, w: cssW, h: cssH };
+        bldAge = 0;
+        a = 1;
+        bxo = -mx;
+        byo = -my;
+        bldCtx.setTransform(1, 0, 0, 1, 0, 0);
+        bldCtx.clearRect(0, 0, cw, ch);
+        bldCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        renderBuildings(bldCtx, camX, camY, scale, halfW + mx, halfH + my,
+          viewMinX - mx / scale, viewMaxX + mx / scale, viewMinY - my / scale, viewMaxY + my / scale);
+      }
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.drawImage(bldCanvas, bxo, byo, (cssW + mx * 2) * a, (cssH + my * 2) * a);
+      ctx.restore();
     }
 
     function drawRoads(city, sim, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY) {
@@ -1386,6 +1671,7 @@
       drawGerDistricts(scen, artPlaces, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY, now);
       drawRivers(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawRails(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
+      drawBuildings(camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawRoads(city, sim, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawLandmarks(scen, artPlaces, camX, camY, scale, halfW, halfH, now);
       drawJunctionUpgrades(city, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
