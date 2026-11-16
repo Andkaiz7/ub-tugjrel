@@ -5,6 +5,10 @@
   var WIDTH_BUCKETS = 17;
   var COLOR_BUCKETS = 8;
   var EFFECT_DURATION = 800;
+  var SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/';
+  var SAT_BASE_Z = 11;
+  var SAT_MAX_Z = 18;
+  var SAT_KEEP = 360;
 
   var LOAD_STOPS = [
     [0.00, 34, 197, 94],
@@ -290,6 +294,11 @@
     var cachedGerRef = null;
     var gerCache = null;
 
+    var tiles = {};
+    var tileCount = 0;
+    var frameNo = 0;
+    var satShown = false;
+
     var cachedCity = null;
     var cachedEdgeCount = 0;
     var edgeCap = 0;
@@ -478,12 +487,106 @@
       ctx.fill();
     }
 
+    function getTile(z, x, y, keep) {
+      var k = z + '/' + y + '/' + x;
+      var t = tiles[k];
+      if (!t) {
+        if (tileCount >= SAT_KEEP) evictTiles();
+        t = tiles[k] = { img: new Image(), ok: false, used: 0, keep: !!keep };
+        t.img.crossOrigin = 'anonymous';
+        t.img.onload = function () { t.ok = true; };
+        t.img.src = SAT_URL + k;
+        tileCount++;
+      }
+      t.used = frameNo;
+      return t;
+    }
+
+    function evictTiles() {
+      for (var k in tiles) {
+        var t = tiles[k];
+        if (t.keep || t.used > frameNo - 60) continue;
+        t.img.onload = null;
+        delete tiles[k];
+        tileCount--;
+      }
+    }
+
+    function tileX(wx, o, n) {
+      return Math.floor((o.lon + wx / o.kx + 180) / 360 * n);
+    }
+
+    function tileY(wy, o, n) {
+      var la = (o.lat - wy / o.ky) * Math.PI / 180;
+      return Math.floor((1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2 * n);
+    }
+
+    function tileLeft(tx, o, n, camX, scale, halfW) {
+      return Math.round(((tx / n * 360 - 180 - o.lon) * o.kx - camX) * scale + halfW);
+    }
+
+    function tileTop(ty, o, n, camY, scale, halfH) {
+      var la = Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n))) * 180 / Math.PI;
+      return Math.round(((o.lat - la) * o.ky - camY) * scale + halfH);
+    }
+
+    function drawSatellite(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+      satShown = false;
+      var o = map && map.origin;
+      if (!o || typeof Image === 'undefined') return;
+      if (root.document && root.document.readyState !== 'complete') return;
+      frameNo++;
+      var dims = getMapDims();
+      var nb = 1 << SAT_BASE_Z;
+      for (var by = tileY(0, o, nb); by <= tileY(dims.h, o, nb); by++) {
+        for (var bx = tileX(0, o, nb); bx <= tileX(dims.w, o, nb); bx++) getTile(SAT_BASE_Z, bx, by, true);
+      }
+      var z = Math.round(Math.log(156543.03 * Math.cos(o.lat * Math.PI / 180) * scale * dpr) / Math.LN2);
+      z = clamp(z, SAT_BASE_Z, SAT_MAX_Z);
+      var n = 1 << z;
+      var x0 = tileX(viewMinX, o, n);
+      var x1 = tileX(viewMaxX, o, n);
+      var y0 = tileY(viewMinY, o, n);
+      var y1 = tileY(viewMaxY, o, n);
+      for (var ty = y0; ty <= y1; ty++) {
+        var top = tileTop(ty, o, n, camY, scale, halfH);
+        var bot = tileTop(ty + 1, o, n, camY, scale, halfH);
+        for (var tx = x0; tx <= x1; tx++) {
+          var left = tileLeft(tx, o, n, camX, scale, halfW);
+          var right = tileLeft(tx + 1, o, n, camX, scale, halfW);
+          var t = getTile(z, tx, ty, false);
+          if (t.ok) {
+            ctx.drawImage(t.img, left, top, right - left, bot - top);
+            satShown = true;
+            continue;
+          }
+          for (var d = 1; z - d >= SAT_BASE_Z; d++) {
+            var p = tiles[(z - d) + '/' + (ty >> d) + '/' + (tx >> d)];
+            if (!p || !p.ok) continue;
+            var s = 256 >> d;
+            p.used = frameNo;
+            ctx.drawImage(p.img, (tx - ((tx >> d) << d)) * s, (ty - ((ty >> d) << d)) * s, s, s, left, top, right - left, bot - top);
+            satShown = true;
+            break;
+          }
+        }
+      }
+      if (!satShown) return;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+      ctx.fillRect(0, 0, cssW, cssH);
+    }
+
     function drawGerDistricts(scen, artPlaces, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY, now) {
       var gerAreas = scen && scen.gerAreas;
       if (!gerAreas || !gerAreas.length) return;
       if (cachedGerRef !== gerAreas) {
         cachedGerRef = gerAreas;
         gerCache = buildGerCache(gerAreas);
+      }
+
+      if (satShown) {
+        drawGerSmoke(camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY, now);
+        return;
       }
 
       var detailed = scale > 0.12 && artPlaces && typeof artPlaces.draw === 'function';
@@ -582,6 +685,11 @@
       }
       ctx.fill();
 
+      drawGerSmoke(camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY, now);
+    }
+
+    function drawGerSmoke(camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY, now) {
+      var a, i, ga, sx, sy;
       var tBase = now * 0.00018;
       var wispBase = Math.max(2.2, 8 * scale);
       ctx.fillStyle = 'rgba(120, 130, 142, 0.16)';
@@ -605,6 +713,10 @@
     function drawRivers(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       if (!map || !map.rivers) return;
       var rivers = map.rivers;
+      var fade = satShown ? clamp(1.4 - scale * 12, 0, 1) : 1;
+      if (fade <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = fade;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       for (var i = 0; i < rivers.length; i++) {
@@ -616,14 +728,15 @@
 
         ctx.beginPath();
         tracePolylineScreen(ctx, riv.pts, camX, camY, scale, halfW, halfH);
-        ctx.strokeStyle = '#bfe0f5';
+        ctx.strokeStyle = satShown ? 'rgba(125, 196, 240, 0.55)' : '#bfe0f5';
         ctx.lineWidth = rw;
         ctx.stroke();
 
-        ctx.strokeStyle = '#e2f4fd';
+        ctx.strokeStyle = satShown ? 'rgba(226, 244, 253, 0.45)' : '#e2f4fd';
         ctx.lineWidth = Math.max(0.7, rw * 0.42);
         ctx.stroke();
       }
+      ctx.restore();
     }
 
     function drawRails(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY) {
@@ -914,9 +1027,9 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
-      ctx.strokeStyle = 'rgba(238, 241, 244, 0.85)';
+      ctx.strokeStyle = satShown ? 'rgba(15, 23, 42, 0.75)' : 'rgba(238, 241, 244, 0.85)';
       ctx.lineWidth = 3;
-      ctx.fillStyle = '#64748b';
+      ctx.fillStyle = satShown ? '#f1f5f9' : '#64748b';
       for (var i = 0; i < places.length; i++) {
         var p = places[i];
         var sx = (p.x - camX) * scale + halfW;
@@ -1230,8 +1343,14 @@
       ctx.font = '500 9px ' + FONT_STACK;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-      ctx.fillText('\u00a9 OpenStreetMap', cssW - 6, cssH - 4);
+      var txt = satShown ? '\u00a9 OpenStreetMap \u00b7 Esri, Maxar' : '\u00a9 OpenStreetMap';
+      if (satShown) {
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.7)';
+        ctx.strokeText(txt, cssW - 6, cssH - 4);
+      }
+      ctx.fillStyle = satShown ? 'rgba(255, 255, 255, 0.9)' : 'rgba(15, 23, 42, 0.6)';
+      ctx.fillText(txt, cssW - 6, cssH - 4);
       ctx.restore();
     }
 
@@ -1263,6 +1382,7 @@
       var viewMaxY = camY + halfH / scale;
 
       drawGround(camX, camY, scale, halfW, halfH);
+      drawSatellite(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawGerDistricts(scen, artPlaces, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY, now);
       drawRivers(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
       drawRails(map, camX, camY, scale, halfW, halfH, viewMinX, viewMaxX, viewMinY, viewMaxY);
