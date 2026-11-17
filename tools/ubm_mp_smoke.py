@@ -325,6 +325,9 @@ def rematch(b):
     drawn = p1.evaluate('__stub.calls.report[0]')
     assert drawn.get('draw') is True and 'winnerId' not in drawn, drawn
     p1.screenshot(path=str(OUT / 'draw.png'))
+    p2.evaluate("() => { const s = __stub.log().find(a => a.action_type === 'start').action_data; return Usion.game.action('start', {m: 'forged', seed: 1, gid: s.gid, roster: s.roster}); }")
+    p1.wait_for_timeout(800)
+    assert st(p1)['screen'] == 'results' and st(p3)['screen'] == 'results', 'a start from a non-host is ignored'
     p1.reload()
     wait_screen(p1, 'hall')
     p1.wait_for_timeout(1500)
