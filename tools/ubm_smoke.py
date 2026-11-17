@@ -281,7 +281,7 @@ def with_late_script(js):
     def setup(pg):
         def page(route):
             r = route.fetch()
-            body = r.text().replace('<script src="app.js"></script>', '<script src="app.js"></script>\n<script src="late-mp.js"></script>')
+            body = r.text().replace('<script src="mp.js"></script>', '<script src="mp.js"></script>\n<script src="late-mp.js"></script>')
             route.fulfill(response=r, body=body)
 
         def script(route):
