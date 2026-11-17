@@ -686,6 +686,20 @@ def default_autoplay_flow(b):
     pg.context.close()
 
 
+def skip_flow(b):
+    pg, errors = new_page(b, {'width': 360, 'height': 640}, True)
+    wait_round(pg)
+    s0 = st(pg)
+    assert pg.is_visible('#skipBtn') and pg.get_attribute('#skipBtn', 'aria-label') == 'Алгасах'
+    pg.click('#skipBtn')
+    pg.wait_for_function("document.querySelectorAll('#line .slot.miss').length > 0", timeout=2000)
+    pg.wait_for_function("UBM.state().q === %d" % (s0['q'] + 1), timeout=4000)
+    s1 = st(pg)
+    assert s1['lives'] == s0['lives'] and s1['score'] == s0['score'] and s1['screen'] == 'round', (s0, s1)
+    assert not errors, errors
+    pg.context.close()
+
+
 def multi_flow(b):
     js, _, _ = media_fixture(START_GID, all_pre=True)
     pg, errors = new_page(b, {'width': 390, 'height': 844}, True, setup=media_setup(js))
@@ -774,6 +788,7 @@ with sync_playwright() as p:
     browser = p.chromium.launch(args=['--autoplay-policy=no-user-gesture-required'])
     main_flow(browser)
     media_flow(browser)
+    skip_flow(browser)
     multi_flow(browser)
     shots(browser, {'width': 360, 'height': 640}, 'small')
     shots(browser, {'width': 390, 'height': 844}, 'en', '?lang=en')

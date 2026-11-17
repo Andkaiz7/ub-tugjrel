@@ -8,7 +8,7 @@
       global: 'Дэлхий', next: 'Дараагийн дуучин', perfect: 'Төгс!', done: 'Дууслаа', out: 'Амь дууслаа',
       saving: 'Хадгалж байна…', saved: 'Хадгалагдлаа', failed: 'Хадгалагдаагүй', guest: 'Нэвтэрч байж хадгална',
       retry: 'Дахин илгээх', loading: 'Ачаалж байна…', empty: 'Одоохондоо хоосон', error: 'Ачаалж чадсангүй',
-      me: 'Би', mute: 'Дуу хаах', board: 'Тэргүүлэгчид', start: 'Эхлэх', count: 'Дууны тоо'
+      me: 'Би', mute: 'Дуу хаах', board: 'Тэргүүлэгчид', skip: 'Алгасах', start: 'Эхлэх', count: 'Дууны тоо'
     },
     en: {
       lives: 'Lives', score: 'Score', lines: 'lines', pick: 'Pick a singer', search: 'Search', packs: 'Packs',
@@ -16,7 +16,7 @@
       global: 'Global', next: 'Next singer', perfect: 'Perfect!', done: 'Finished', out: 'Out of lives',
       saving: 'Saving…', saved: 'Saved', failed: 'Not saved', guest: 'Sign in to save',
       retry: 'Retry', loading: 'Loading…', empty: 'No records yet', error: 'Could not load',
-      me: 'Me', mute: 'Mute', board: 'Leaderboard', start: 'Start', count: 'Songs'
+      me: 'Me', mute: 'Mute', board: 'Leaderboard', skip: 'Skip', start: 'Start', count: 'Songs'
     }
   };
   var KEY_LAST = 'ubm:last';
@@ -679,7 +679,7 @@
     call(r.onLine, r.i, true, ms, r.lives);
     r.timer = setTimeout(function () { if (R === r && !r.over) nextQ(); }, NEXT_MS);
   }
-  function lineLost() {
+  function revealRest(then) {
     var ms = elapsed();
     var r = R;
     var Q = r.qs[r.i];
@@ -690,8 +690,10 @@
       ss[k].className = 'slot miss';
     }
     call(r.onLine, r.i, false, ms, r.lives);
-    r.timer = setTimeout(function () { if (R === r && !r.over) finish(); }, LOST_MS);
+    r.timer = setTimeout(function () { if (R === r && !r.over) then(); }, LOST_MS);
   }
+  function lineLost() { revealRest(finish); }
+  function skip() { if (R && !R.over && !R.lock) revealRest(nextQ); }
   function finish() {
     var r = R;
     r.over = true;
@@ -1065,6 +1067,7 @@
     boardEl = doc.querySelector('.board');
     boardNext = boardEl.nextSibling;
     $('lbBtn').addEventListener('click', openBoard);
+    $('skipBtn').addEventListener('click', skip);
     $('boardX').addEventListener('click', closeBoard);
     $('boardDlg').addEventListener('click', function (e) { if (e.target === $('boardDlg')) closeBoard(); });
     $('picker').addEventListener('click', function (e) { if (e.target === $('picker')) closePicker(); });
