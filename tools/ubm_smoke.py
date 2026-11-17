@@ -1,17 +1,31 @@
 import functools
 import http.server
+import io
+import json
 import pathlib
+import struct
 import sys
 import threading
 import time
+import wave
+import zlib
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / '.superpowers' / 'sdd' / '2026-11-16-ugee-buu-mart' / 'task-3-shots'
 OUT.mkdir(parents=True, exist_ok=True)
 STUB = (ROOT / 'tools' / 'ubm-stub.js').read_text()
+LYRICS = json.loads(
+    (ROOT / 'ugee-buu-mart' / 'lyrics-data.js').read_text().split('window.LYRICS=', 1)[1].rstrip(';\n ')
+)
+START_GID = '2ca00e15'
 PICK = '70357a81'
 CHIP_PICK = '548ce743'
+GUARANTEED_GID = '547916ab'
+URL_IMG = 'https://is1-ssl.mzstatic.com/fake/a.jpg'
+URL_A = 'https://audio-ssl.itunes.apple.com/fake/a.m4a'
+URL_B = 'https://audio-ssl.itunes.apple.com/fake/b.m4a'
+URL_C = 'https://audio-ssl.itunes.apple.com/fake/c.m4a'
 
 TILE_FOR = """w => {
   const b = [...document.querySelectorAll('#tray .tile')].find(x => !x.classList.contains('used') && x.textContent === w);
@@ -74,13 +88,14 @@ def wrong_tap(pg):
     return i
 
 
-def new_page(b, viewport, stub, query='', extra=None, setup=None):
-    ctx = b.new_context(viewport=viewport, device_scale_factor=2)
+def new_page(b, viewport, stub, query='', extra=None, setup=None, has_touch=False):
+    ctx = b.new_context(viewport=viewport, device_scale_factor=2, has_touch=has_touch)
     if stub:
         ctx.add_init_script(STUB)
     if extra:
         ctx.add_init_script(extra)
     pg = ctx.new_page()
+    pg.route('**/ugee-buu-mart/media-data.js', lambda r: r.fulfill(status=200, body='', content_type='application/javascript'))
     if setup:
         setup(pg)
     errors = []
@@ -252,6 +267,8 @@ def main_flow(b):
 def shots(b, viewport, name, query=''):
     pg, errors = new_page(b, viewport, True, query)
     wait_round(pg)
+    if 'lang=en' in query:
+        assert pg.get_attribute('#muteBtn', 'aria-label') == 'Mute'
     answer_line(pg)
     answer_line(pg)
     i = pg.evaluate(TILE_FOR, pg.evaluate('UBM.current().answer[0]'))
@@ -336,6 +353,10 @@ def no_host(b):
     pg, errors = new_page(b, {'width': 390, 'height': 844}, False)
     wait_round(pg)
     assert pg.evaluate('typeof window.Usion') == 'undefined'
+    assert pg.evaluate('typeof window.MEDIA') == 'undefined'
+    assert pg.evaluate("document.querySelectorAll('#chipAv .avimg').length") == 0
+    assert pg.evaluate('UBM.music()') == {'src': '', 'playing': False, 'muted': False}
+    assert pg.is_hidden('#songSrc')
     answer_line(pg)
     for _ in range(3):
         wrong_tap(pg)
@@ -352,16 +373,311 @@ def no_host(b):
     pg.context.close()
 
 
+PNG_BYTES = None
+WAV_BYTES = None
+
+
+def fake_png():
+    global PNG_BYTES
+    if PNG_BYTES is None:
+        def chunk(t, d):
+            c = t + d
+            return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+        row = b'\x00' + b'\x5a\xc8\xfa\xff' * 32
+        ihdr = struct.pack('>IIBBBBB', 32, 32, 8, 6, 0, 0, 0)
+        idat = zlib.compress(row * 32)
+        PNG_BYTES = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b'')
+    return PNG_BYTES
+
+
+def fake_wav(sec=60):
+    global WAV_BYTES
+    if WAV_BYTES is None:
+        buf = io.BytesIO()
+        with wave.open(buf, 'wb') as w:
+            w.setnchannels(1)
+            w.setsampwidth(1)
+            w.setframerate(8000)
+            w.writeframes(b'\x80' * (8000 * sec))
+        WAV_BYTES = buf.getvalue()
+    return WAV_BYTES
+
+
+def media_fixture(start_gid, all_pre=False):
+    g_start = next(g for g in LYRICS['groups'] if g['id'] == start_gid)
+    g_pick = next(g for g in LYRICS['groups'] if g['id'] == CHIP_PICK)
+    g_other = next(g for g in LYRICS['groups'] if g['id'] == PICK)
+    g_guar = next(g for g in LYRICS['groups'] if g['id'] == GUARANTEED_GID)
+    start_titles = list(dict.fromkeys(s['t'] for s in g_start['songs']))
+    no_pre_start = None if all_pre else start_titles[-1]
+    pre_start = {t: URL_A for t in (start_titles if all_pre else start_titles[:-1])}
+    pre_pick = {s['t']: URL_B for s in g_pick['songs']}
+    pre_other = {s['t']: URL_C for s in g_other['songs']}
+    guar_titles = list(dict.fromkeys(s['t'] for s in g_guar['songs']))
+    no_pre_guar = guar_titles[-1]
+    pre_guar = {t: URL_A for t in guar_titles[:-1]}
+    data = {
+        'img': {start_gid: URL_IMG},
+        'pre': {start_gid: pre_start, CHIP_PICK: pre_pick, PICK: pre_other, GUARANTEED_GID: pre_guar},
+    }
+    js = 'window.MEDIA=' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';'
+    return js, no_pre_start, no_pre_guar
+
+
+def media_setup(js):
+    png = fake_png()
+    wav = fake_wav()
+    def setup(pg):
+        pg.route('**/ugee-buu-mart/media-data.js', lambda r: r.fulfill(status=200, body=js, content_type='application/javascript'))
+        pg.route('https://is1-ssl.mzstatic.com/fake/**', lambda r: r.fulfill(status=200, body=png, content_type='image/png'))
+        pg.route(
+            'https://audio-ssl.itunes.apple.com/fake/**',
+            lambda r: r.fulfill(
+                status=200,
+                body=wav,
+                headers={'access-control-allow-origin': '*', 'content-type': 'audio/wav'},
+            ),
+        )
+    return setup
+
+
+def media_flow(b):
+    js, no_pre_start, no_pre_guar = media_fixture(START_GID)
+    pg, errors = new_page(b, {'width': 390, 'height': 844}, True, setup=media_setup(js))
+    wait_round(pg)
+    assert st(pg)['groupId'] == START_GID
+    pg.wait_for_function("(() => { const i = document.querySelector('#chipAv .avimg'); return !!(i && i.complete && i.naturalWidth > 0); })()", timeout=3000)
+
+    seen_no_pre = False
+    prev_url = None
+    for q in range(10):
+        cur = pg.evaluate('UBM.current()')
+        assert cur is not None
+        expect_url = '' if cur['song'] == no_pre_start else URL_A
+        if expect_url:
+            pg.wait_for_function("u => UBM.music().src === u && UBM.music().playing", arg=expect_url, timeout=3000)
+            assert pg.is_visible('#songSrc')
+            assert pg.text_content('#songSrc') == 'Apple Music'
+            if prev_url == expect_url:
+                assert pg.evaluate("document.getElementById('bgm').currentTime") >= 0.2
+            pg.wait_for_function("document.getElementById('bgm').currentTime >= 0.25", timeout=3000)
+        else:
+            seen_no_pre = True
+            pg.wait_for_function("!UBM.music().playing", timeout=2000)
+            assert pg.is_hidden('#songSrc')
+        prev_url = expect_url
+        if q < 9:
+            answer_line(pg)
+
+    pg.evaluate("""gid => {
+      const g = UBM.groupById(gid);
+      const si = g.songs.findIndex(x => x.t.length >= 20 && x.t.length <= 26);
+      const q = UBMCore.round(g, [{ s: si, e: 0 }], UBMCore.rng(1))[0];
+      UBM.startRound({ group: g, qs: [q], mode: 'solo' });
+    }""", START_GID)
+    wait_round(pg)
+    assert len(pg.evaluate("UBM.current().song")) >= 20
+    pg.wait_for_function("u => UBM.music().src === u && UBM.music().playing", arg=URL_A, timeout=3000)
+    assert pg.evaluate("(() => { const e = document.getElementById('songT'); return e.scrollWidth <= e.clientWidth; })()"), pg.text_content('#songT')
+    assert pg.evaluate("document.getElementById('songSrc').getBoundingClientRect().top > document.getElementById('song').getBoundingClientRect().bottom - 1")
+    pg.wait_for_timeout(450)
+    pg.screenshot(path=str(OUT / 'round-photo.png'))
+
+    assert pg.is_visible('#muteBtn')
+    pg.wait_for_timeout(200)
+    box = pg.locator('#muteBtn').bounding_box()
+    assert box['width'] >= 40 and box['height'] >= 40, box
+    assert pg.get_attribute('#muteBtn', 'aria-pressed') == 'false'
+    assert pg.get_attribute('#muteBtn', 'aria-label') == 'Дуу хаах'
+    assert pg.evaluate('UBM.music().muted') is False
+
+    pg.click('#muteBtn')
+    assert pg.evaluate('UBM.music().muted') is True
+    assert pg.evaluate("document.getElementById('bgm').muted") is True
+    assert pg.evaluate('UBM.music().playing') is False
+    assert pg.get_attribute('#muteBtn', 'aria-pressed') == 'true'
+    assert pg.is_visible('#muteBtn .muted') and not pg.is_visible('#muteBtn .unmuted')
+    pg.reload()
+    wait_round(pg)
+    assert pg.evaluate('UBM.music().muted') is True
+    assert pg.evaluate("document.getElementById('bgm').muted") is True
+    assert pg.evaluate('UBM.music().playing') is False
+    assert pg.get_attribute('#muteBtn', 'aria-pressed') == 'true'
+    pg.click('#muteBtn')
+    assert pg.evaluate('UBM.music().muted') is False
+    assert pg.evaluate("document.getElementById('bgm').muted") is False
+    assert pg.get_attribute('#muteBtn', 'aria-pressed') == 'false'
+    assert pg.is_visible('#muteBtn .unmuted') and not pg.is_visible('#muteBtn .muted')
+    if pg.evaluate('UBM.current().song') == no_pre_start:
+        answer_line(pg)
+    pg.wait_for_function("UBM.music().playing", timeout=3000)
+
+    pg.evaluate(HIDE, True)
+    pg.wait_for_function("!UBM.music().playing", timeout=2000)
+    pg.evaluate(HIDE, False)
+    pg.wait_for_function("UBM.music().playing", timeout=3000)
+
+    pg.evaluate("document.getElementById('bgm').pause()")
+    pg.wait_for_function("!UBM.music().playing", timeout=2000)
+    q_before = st(pg)['q']
+    i = pg.evaluate(WRONG_TILE)
+    assert i >= 0
+    tap(pg, i)
+    pg.wait_for_function("UBM.music().playing", timeout=2000)
+    assert st(pg)['q'] == q_before
+
+    pg.click('#chip')
+    assert pg.is_visible('#picker')
+    pg.wait_for_function("!UBM.music().playing", timeout=2000)
+    assert pg.evaluate("document.querySelectorAll('#pkList .sg[data-gid=\"%s\"] .avimg').length" % CHIP_PICK) == 0
+    assert pg.text_content('#pkList .sg[data-gid="%s"] .av' % CHIP_PICK).strip() != ''
+    pg.click('#pkX')
+    assert pg.is_hidden('#picker')
+    pg.wait_for_function("UBM.music().playing", timeout=3000)
+
+    pg.click('#chip')
+    assert pg.is_visible('#picker')
+    pg.wait_for_function("!UBM.music().playing", timeout=2000)
+    pg.click('#pkList .sg[data-gid="%s"]' % CHIP_PICK)
+    wait_round(pg)
+    assert st(pg)['groupId'] == CHIP_PICK
+    assert pg.evaluate("document.querySelectorAll('#chipAv .avimg').length") == 0
+    assert pg.text_content('#chipAv').strip() != ''
+    pg.wait_for_function("u => UBM.music().src === u && UBM.music().playing", arg=URL_B, timeout=3000)
+    assert pg.is_visible('#songSrc')
+
+    pg.evaluate("""(args) => {
+      const g1 = UBM.groupById(args[0]);
+      const q1 = UBMCore.round(g1, [{ s: 0, e: 0 }], UBMCore.rng(1))[0];
+      UBM.startRound({ group: g1, qs: [q1], mode: 'solo' });
+    }""", [START_GID])
+    pg.wait_for_timeout(50)
+    pg.evaluate("""(args) => {
+      const g2 = UBM.groupById(args[0]);
+      const q2 = UBMCore.round(g2, [{ s: 0, e: 0 }], UBMCore.rng(1))[0];
+      UBM.startRound({ group: g2, qs: [q2], mode: 'solo' });
+    }""", [PICK])
+    pg.wait_for_function("u => UBM.music().src === u && UBM.music().playing", arg=URL_C, timeout=3000)
+
+    if not seen_no_pre:
+        pg.click('#chip')
+        pg.click('#pkList .sg[data-gid="%s"]' % GUARANTEED_GID)
+        wait_round(pg)
+        for q in range(7):
+            if pg.evaluate('UBM.current().song') == no_pre_guar:
+                seen_no_pre = True
+                pg.wait_for_function("!UBM.music().playing", timeout=2000)
+                assert pg.is_hidden('#songSrc')
+                answer_line(pg)
+                break
+            answer_line(pg)
+    assert seen_no_pre
+    pg.wait_for_function("UBM.music().playing", timeout=3000)
+
+    for _ in range(3):
+        wrong_tap(pg)
+    pg.wait_for_function("UBM.state().screen === 'end'", timeout=5000)
+    pg.wait_for_function("!UBM.music().playing", timeout=2000)
+    assert not errors, errors
+
+    page_errs = []
+    pg.on('pageerror', lambda e: page_errs.append(str(e)))
+    pg.route('https://is1-ssl.mzstatic.com/fake/**', lambda r: r.fulfill(status=404))
+    pg.click('#endPk .sg[data-gid="%s"]' % START_GID)
+    wait_round(pg)
+    pg.reload()
+    wait_round(pg)
+    pg.wait_for_function("document.querySelectorAll('#chipAv .avimg').length === 0", timeout=3000)
+    assert pg.text_content('#chipAv').strip() != ''
+    assert not page_errs, page_errs
+    pg.context.close()
+
+
+AUTOPLAY_GATE = """(() => {
+  let active = false;
+  Object.defineProperty(navigator, 'userActivation', {
+    configurable: true,
+    get: () => ({ hasBeenActive: active, isActive: active })
+  });
+  for (const ev of ['pointerup', 'touchend', 'click']) {
+    window.addEventListener(ev, e => { if (e.isTrusted) active = true; }, { capture: true, passive: true });
+  }
+  const origPlay = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function () {
+    if (!navigator.userActivation || !navigator.userActivation.hasBeenActive) {
+      return Promise.reject(new DOMException('blocked', 'NotAllowedError'));
+    }
+    return origPlay.apply(this, arguments);
+  };
+  const OrigAC = window.AudioContext || window.webkitAudioContext;
+  if (OrigAC) {
+    const proto = Object.getPrototypeOf(OrigAC.prototype);
+    const stateDesc = Object.getOwnPropertyDescriptor(proto, 'state') || Object.getOwnPropertyDescriptor(OrigAC.prototype, 'state');
+    const origResume = OrigAC.prototype.resume;
+    const WrappedAC = function () {
+      const ctx = new OrigAC(...arguments);
+      let unlocked = false;
+      Object.defineProperty(ctx, 'state', {
+        configurable: true,
+        get: function () {
+          const real = stateDesc && stateDesc.get ? stateDesc.get.call(ctx) : 'running';
+          if (real === 'closed') return 'closed';
+          return unlocked ? real : 'suspended';
+        }
+      });
+      ctx.resume = function () {
+        if (!navigator.userActivation || !navigator.userActivation.hasBeenActive) {
+          return Promise.reject(new DOMException('blocked', 'NotAllowedError'));
+        }
+        unlocked = true;
+        window.__ubmResumeCalls = (window.__ubmResumeCalls || 0) + 1;
+        return origResume.call(ctx);
+      };
+      window.__ubmActx = ctx;
+      return ctx;
+    };
+    WrappedAC.prototype = OrigAC.prototype;
+    window.AudioContext = WrappedAC;
+    if (window.webkitAudioContext) window.webkitAudioContext = WrappedAC;
+  }
+})();"""
+
+
+def default_autoplay_flow(b):
+    js, _, _ = media_fixture(START_GID, all_pre=True)
+    pg, errors = new_page(b, {'width': 390, 'height': 844}, True, extra=AUTOPLAY_GATE, setup=media_setup(js), has_touch=True)
+    wait_round(pg)
+    pg.wait_for_timeout(300)
+    assert pg.evaluate("UBM.music().src") == URL_A
+    assert pg.evaluate("UBM.music().playing") is False
+    assert pg.evaluate("window.__ubmActx && window.__ubmActx.state") == 'suspended'
+    assert pg.is_visible('#songSrc')
+    assert not errors, errors
+    i = pg.evaluate(WRONG_TILE)
+    assert i >= 0
+    pg.tap('#tray .tile[data-i="%d"]' % i)
+    pg.wait_for_function("UBM.music().playing", timeout=2000)
+    assert st(pg)['q'] == 0
+    pg.wait_for_function("window.__ubmActx && window.__ubmActx.state === 'running'", timeout=2000)
+    assert pg.evaluate("window.__ubmResumeCalls >= 1")
+    assert not errors, errors
+    pg.context.close()
+
+
 httpd = serve()
 BASE = 'http://127.0.0.1:%d' % httpd.server_address[1]
 with sync_playwright() as p:
-    browser = p.chromium.launch()
+    browser = p.chromium.launch(args=['--autoplay-policy=no-user-gesture-required'])
     main_flow(browser)
+    media_flow(browser)
     shots(browser, {'width': 360, 'height': 640}, 'small')
     shots(browser, {'width': 390, 'height': 844}, 'en', '?lang=en')
     no_host(browser)
     boot_seam(browser)
     hung_storage(browser)
     browser.close()
+    default_browser = p.chromium.launch()
+    default_autoplay_flow(default_browser)
+    default_browser.close()
 httpd.shutdown()
 print('UBM SMOKE OK', OUT)

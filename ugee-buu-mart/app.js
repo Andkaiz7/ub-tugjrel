@@ -8,7 +8,7 @@
       global: 'Дэлхий', next: 'Дараагийн дуучин', perfect: 'Төгс!', done: 'Дууслаа', out: 'Амь дууслаа',
       saving: 'Хадгалж байна…', saved: 'Хадгалагдлаа', failed: 'Хадгалагдаагүй', guest: 'Нэвтэрч байж хадгална',
       retry: 'Дахин илгээх', loading: 'Ачаалж байна…', empty: 'Одоохондоо хоосон', error: 'Ачаалж чадсангүй',
-      me: 'Би'
+      me: 'Би', mute: 'Дуу хаах'
     },
     en: {
       lives: 'Lives', score: 'Score', lines: 'lines', pick: 'Pick a singer', search: 'Search', packs: 'Packs',
@@ -16,11 +16,13 @@
       global: 'Global', next: 'Next singer', perfect: 'Perfect!', done: 'Finished', out: 'Out of lives',
       saving: 'Saving…', saved: 'Saved', failed: 'Not saved', guest: 'Sign in to save',
       retry: 'Retry', loading: 'Loading…', empty: 'No records yet', error: 'Could not load',
-      me: 'Me'
+      me: 'Me', mute: 'Mute'
     }
   };
   var KEY_LAST = 'ubm:last';
   var KEY_PEND = 'ubm:pend';
+  var KEY_MUTE = 'ubm:mute';
+  var BGM_VOL = 0.3;
   var NEXT_MS = 900;
   var AV = [
     ['#ff7eb3', '#d6246e'], ['#ffad5c', '#e2540f'], ['#ffd86b', '#e08a00'], ['#5fd4f4', '#1767c9'],
@@ -58,6 +60,17 @@
   var reduce = false;
   var bootCfg = null;
   var waiting = false;
+  var bgm = null;
+  var actx = null;
+  var gainNode = null;
+  var muted = false;
+  var muteTouched = false;
+  var wantUrl = '';
+  var curUrl = '';
+  var audioTried = false;
+  var fadeTimer = 0;
+  var musicSeq = 0;
+  var hasOwn = Object.prototype.hasOwnProperty;
 
   function $(id) { return doc.getElementById(id); }
   function noop() {}
@@ -178,22 +191,259 @@
     });
   }
 
+  function mediaImg(gid) {
+    var m = root.MEDIA;
+    return m && m.img && hasOwn.call(m.img, gid) && typeof m.img[gid] === 'string' ? m.img[gid] : '';
+  }
+  function mediaPre(gid, song) {
+    var m = root.MEDIA;
+    var g = m && m.pre && hasOwn.call(m.pre, gid) ? m.pre[gid] : null;
+    return g && hasOwn.call(g, song) && typeof g[song] === 'string' ? g[song] : '';
+  }
   function initials(name) {
     var w = String(name || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     if (!w.length) return '♪';
     return (Array.from(w[0])[0] + (w.length > 1 ? Array.from(w[1])[0] : '')).toUpperCase();
   }
   function paintAv(e, g) {
-    if (!g) { e.textContent = ''; return; }
+    if (!g) {
+      e.textContent = '';
+      e._avG = '';
+      e._avU = '';
+      e._avFail = '';
+      return;
+    }
+    var url = mediaImg(g.id);
+    if (e._avG === g.id && e._avU === url && (e.querySelector('.avimg') || !url || e._avFail === url)) return;
+    e._avG = g.id;
+    e._avU = url;
+    e._avFail = '';
     var c = AV[C.seedOf(g.id) % AV.length];
     e.textContent = initials(g.name);
     e.style.background = 'linear-gradient(145deg,' + c[0] + ',' + c[1] + ')';
     e.classList.toggle('pack', !!g.pack);
+    if (!url) return;
+    var img = doc.createElement('img');
+    img.className = 'avimg';
+    img.alt = '';
+    img.decoding = 'async';
+    img.loading = 'lazy';
+    img.referrerPolicy = 'no-referrer';
+    img.draggable = false;
+    img.onerror = function () {
+      e._avFail = url;
+      if (img.parentNode === e) e.removeChild(img);
+    };
+    img.src = url;
+    e.appendChild(img);
   }
   function paintHearts(box, lives) {
     var hs = box.children;
     for (var k = 0; k < hs.length; k++) hs[k].classList.toggle('off', k >= lives);
     box.setAttribute('aria-label', t.lives + ': ' + lives);
+  }
+
+  function ensureAudio() {
+    if (!bgm) {
+      bgm = $('bgm');
+      if (!bgm) return;
+      bgm.muted = muted;
+    }
+    if (!audioTried) {
+      audioTried = true;
+      var AC = root.AudioContext || root.webkitAudioContext;
+      if (AC) {
+        var ctx = null;
+        try {
+          ctx = new AC();
+          var srcNode = ctx.createMediaElementSource(bgm);
+          var gn = ctx.createGain();
+          gn.gain.value = muted ? 0 : BGM_VOL;
+          srcNode.connect(gn);
+          gn.connect(ctx.destination);
+          actx = ctx;
+          gainNode = gn;
+        } catch (e) {
+          if (ctx && typeof ctx.close === 'function') attempt(function () { return ctx.close(); }).catch(noop);
+          actx = null;
+          gainNode = null;
+        }
+      }
+      if (!gainNode) bgm.volume = muted ? 0 : BGM_VOL;
+    }
+  }
+  function setGain(v, ms) {
+    if (!bgm) return;
+    var target = muted ? 0 : v;
+    if (gainNode && actx && actx.state !== 'closed') {
+      var now = actx.currentTime;
+      var g = gainNode.gain;
+      g.cancelScheduledValues(now);
+      if (ms > 0 && actx.state === 'running') {
+        g.setValueAtTime(g.value, now);
+        g.linearRampToValueAtTime(target, now + ms / 1000);
+      } else {
+        g.setValueAtTime(target, now);
+      }
+    } else {
+      bgm.volume = target;
+    }
+  }
+  function applyMute(on) {
+    muted = !!on;
+    if (bgm) {
+      bgm.muted = muted;
+      if (muted && !bgm.paused) bgm.pause();
+    }
+    setGain(muted ? 0 : BGM_VOL, 0);
+    var btn = $('muteBtn');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(muted));
+      btn.classList.toggle('off', muted);
+    }
+  }
+  function loadMute() {
+    if (!muteTouched) applyMute(!!lsGet(KEY_MUTE));
+    sGet(KEY_MUTE, FAST_MS).then(function (v) {
+      if (!muteTouched && typeof v === 'boolean') {
+        var wasMuted = muted;
+        applyMute(v);
+        if (wasMuted && !muted && wantUrl && shouldPlay()) musicResume();
+      }
+    });
+  }
+  function shouldPlay() {
+    return scr === 'round' && !pickerOpen && !doc.hidden && !!R && !R.over;
+  }
+  function resumeActx() {
+    if (actx && actx.state !== 'running' && actx.state !== 'closed') {
+      attempt(function () { return actx.resume(); }).catch(noop);
+    }
+  }
+  function tryPlay() {
+    if (!bgm || muted || !shouldPlay()) return;
+    resumeActx();
+    attempt(function () { return bgm.play(); }).catch(noop);
+  }
+  function musicStop() {
+    var seq = ++musicSeq;
+    clearTimeout(fadeTimer);
+    fadeTimer = 0;
+    if (!bgm || bgm.paused) return;
+    if (doc.hidden) {
+      setGain(0, 0);
+      bgm.pause();
+      return;
+    }
+    setGain(0, 250);
+    fadeTimer = setTimeout(function () {
+      fadeTimer = 0;
+      if (seq === musicSeq && bgm) bgm.pause();
+    }, 250);
+  }
+  function musicPause() {
+    musicSeq++;
+    clearTimeout(fadeTimer);
+    fadeTimer = 0;
+    if (bgm && !bgm.paused) {
+      setGain(0, 0);
+      bgm.pause();
+    }
+  }
+  function musicResume() {
+    if (!wantUrl || muted || !shouldPlay()) return;
+    ensureAudio();
+    if (!bgm) return;
+    musicSeq++;
+    clearTimeout(fadeTimer);
+    fadeTimer = 0;
+    if (curUrl !== wantUrl) {
+      curUrl = wantUrl;
+      bgm.src = wantUrl;
+    }
+    if (bgm.paused) {
+      setGain(0, 0);
+      tryPlay();
+      setGain(BGM_VOL, 400);
+    } else {
+      setGain(BGM_VOL, 400);
+    }
+  }
+  function music(Q) {
+    var url = Q && R && R.g ? mediaPre(R.g.id, Q.song) : '';
+    var srcEl = $('songSrc');
+    if (srcEl) srcEl.hidden = !url;
+    if (!url) {
+      wantUrl = '';
+      musicStop();
+      return;
+    }
+    wantUrl = url;
+    ensureAudio();
+    if (!bgm) return;
+    var seq = ++musicSeq;
+    clearTimeout(fadeTimer);
+    fadeTimer = 0;
+    if (curUrl === url) {
+      if (!bgm.paused) {
+        setGain(BGM_VOL, 400);
+        return;
+      }
+      if (!muted && shouldPlay()) {
+        setGain(0, 0);
+        tryPlay();
+        setGain(BGM_VOL, 400);
+      }
+      return;
+    }
+    if (curUrl && !bgm.paused && !muted && shouldPlay()) {
+      setGain(0, 250);
+      fadeTimer = setTimeout(function () {
+        fadeTimer = 0;
+        if (seq !== musicSeq || !bgm) return;
+        curUrl = url;
+        bgm.src = url;
+        if (!muted && shouldPlay()) {
+          tryPlay();
+          setGain(BGM_VOL, 400);
+        }
+      }, 250);
+      return;
+    }
+    curUrl = url;
+    bgm.src = url;
+    if (!muted && shouldPlay()) {
+      setGain(0, 0);
+      tryPlay();
+      setGain(BGM_VOL, 400);
+    }
+  }
+  function toggleMute() {
+    muteTouched = true;
+    applyMute(!muted);
+    sSet(KEY_MUTE, muted);
+    if (!muted && wantUrl && shouldPlay()) {
+      ensureAudio();
+      if (bgm && bgm.paused) {
+        setGain(0, 0);
+        tryPlay();
+        setGain(BGM_VOL, 400);
+      }
+    }
+  }
+  function onVisChange() {
+    syncClock();
+    if (doc.hidden) musicPause();
+    else if (wantUrl && !muted && shouldPlay()) musicResume();
+  }
+  function onUnlock() {
+    resumeActx();
+    if (wantUrl && !muted && shouldPlay()) {
+      ensureAudio();
+      if (bgm && bgm.paused) {
+        musicResume();
+      }
+    }
   }
 
   function screen(name) {
@@ -206,8 +456,10 @@
         R.over = true;
         clearTimeout(R.timer);
       }
+      wantUrl = '';
+      musicStop();
     }
-    closePicker();
+    closePicker(true);
     return scr;
   }
 
@@ -312,6 +564,7 @@
     $('pop').classList.remove('go');
     replay($('card'), 'in');
     $('stage').scrollTop = 0;
+    music(Q);
   }
   function slots() { return $('line').querySelectorAll('.slot'); }
   function tap(k, b) {
@@ -617,16 +870,18 @@
     $('pkList').scrollTop = 0;
     $('picker').hidden = false;
     syncClock();
+    musicStop();
   }
-  function closePicker() {
+  function closePicker(skipMusic) {
     if (!pickerOpen) return;
     pickerOpen = false;
     $('picker').hidden = true;
     syncClock();
+    if (!skipMusic && wantUrl && !muted && shouldPlay()) musicResume();
   }
   function pickFromSheet(g) {
     var cb = pickCb;
-    closePicker();
+    closePicker(true);
     call(cb, g);
   }
 
@@ -658,7 +913,7 @@
   function bind() {
     try { reduce = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) {}
     $('chip').addEventListener('click', function () { if (R && R.mode !== 'race') openPicker(); });
-    $('pkX').addEventListener('click', closePicker);
+    $('pkX').addEventListener('click', function () { closePicker(); });
     $('picker').addEventListener('click', function (e) { if (e.target === $('picker')) closePicker(); });
     $('pkQ').addEventListener('input', function () { renderGrid($('pkList'), $('pkQ').value, pickFromSheet, pickerCur); });
     $('endQ').addEventListener('input', function () { renderGrid($('endPk'), $('endQ').value, pickSolo); });
@@ -666,7 +921,11 @@
     $('retry').addEventListener('click', function () { submitScore(current); });
     $('tabF').addEventListener('click', function () { showTab('friends'); });
     $('tabG').addEventListener('click', function () { showTab('global'); });
-    doc.addEventListener('visibilitychange', syncClock);
+    $('muteBtn').addEventListener('click', toggleMute);
+    doc.addEventListener('visibilitychange', onVisChange);
+    doc.addEventListener('pointerdown', onUnlock, { capture: true, passive: true });
+    doc.addEventListener('touchend', onUnlock, { capture: true, passive: true });
+    doc.addEventListener('click', onUnlock, { capture: true, passive: true });
     doc.addEventListener('touchstart', noop, { passive: true });
     doc.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePicker(); });
     doc.addEventListener('contextmenu', function (e) { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });
@@ -676,6 +935,7 @@
     if (started) return;
     started = true;
     bind();
+    loadMute();
     applyHost();
     renderHud();
     if (C && GROUPS.length) {
@@ -702,6 +962,7 @@
     try { userId = (u && u.user && typeof u.user.getId === 'function' && Usion.user.getId()) || (cfg && cfg.userId) || null; } catch (e) { userId = null; }
     if (!started) { launch(cfg); return; }
     seenP = {};
+    loadMute();
     if (current && !current.saved && current.uid !== userId) {
       current = null;
       renderSave();
@@ -750,7 +1011,14 @@
     state: function () {
       return { screen: scr, groupId: R ? R.g.id : null, q: R ? R.i : -1, lives: R ? R.lives : C.LIVES, score: R ? R.score : 0 };
     },
-    current: function () { return R && R.i >= 0 && R.i < R.qs.length ? R.qs[R.i] : null; }
+    current: function () { return R && R.i >= 0 && R.i < R.qs.length ? R.qs[R.i] : null; },
+    music: function () {
+      return {
+        src: bgm ? (bgm.getAttribute('src') || bgm.src || '') : '',
+        playing: !!(bgm && !bgm.paused && !bgm.ended && !muted && !bgm.muted && (bgm.getAttribute('src') || bgm.src)),
+        muted: !!muted
+      };
+    }
   };
 
   boot();

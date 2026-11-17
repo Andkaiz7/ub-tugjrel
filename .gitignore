@@ -7,3 +7,4 @@ credentials.env
 release/deployment*.json
 tools/osm-buildings-cache.json
 tools/lyrics-cache/
+tools/media-cache/
