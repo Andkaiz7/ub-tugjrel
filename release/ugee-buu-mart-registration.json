@@ -1,0 +1,16 @@
+{
+  "name": "Үгээ бүү март",
+  "description": "Дуучнаа сонгоод дууных нь мөрийн дутуу үгсийг нөхөөрэй. Ганцаараа эсвэл найзуудтайгаа (8 хүртэл) хэн нь хурдан, зөв нөхөхөөр уралдаарай!",
+  "service_type": "game",
+  "cost": 0,
+  "tags": ["game", "multiplayer", "word", "music", "mongolian"],
+  "genre": "strategy",
+  "max_players": 8,
+  "is_published": true,
+  "visibility": "public",
+  "realtime": {
+    "connection_mode": "platform",
+    "connection_transport": "websocket"
+  },
+  "leaderboard": {"enabled": true, "order": "desc"}
+}
