@@ -50,9 +50,7 @@
   var pickCb = null;
   var endRes = null;
   var current = null;
-  var saving = null;
-  var saveState = '';
-  var saveInfo = null;
+  var pickerCur = null;
   var tab = 'friends';
   var boardSeq = 0;
   var flushing = false;
@@ -202,9 +200,12 @@
     scr = name;
     var els = doc.querySelectorAll('[data-screen]');
     for (var i = 0; i < els.length; i++) els[i].hidden = els[i].getAttribute('data-screen') !== name;
-    if (name !== 'round' && R && !R.over) {
-      R.over = true;
-      clearTimeout(R.timer);
+    if (name !== 'round') {
+      soloSeq++;
+      if (R && !R.over) {
+        R.over = true;
+        clearTimeout(R.timer);
+      }
     }
     closePicker();
     return scr;
@@ -212,7 +213,7 @@
 
   function syncClock() {
     if (!R || R.over) return;
-    var stop = doc.hidden || pickerOpen;
+    var stop = (doc.hidden && R.mode !== 'race') || pickerOpen;
     if (stop && !R.pausedAt) R.pausedAt = clock();
     else if (!stop && R.pausedAt) {
       R.t0 += clock() - R.pausedAt;
@@ -238,15 +239,21 @@
     o = o || {};
     var g = typeof o.group === 'string' ? BY_ID[o.group] : o.group;
     if (!g) return;
-    if (!Array.isArray(o.qs) || !o.qs.length) { playSolo(g); return; }
+    var race = o.mode === 'race';
+    if (!Array.isArray(o.qs) || !o.qs.length) {
+      if (!race) playSolo(g);
+      return;
+    }
+    var from = Math.max(0, Math.min(o.qs.length, o.from | 0));
     soloSeq++;
     if (R) {
       R.over = true;
       clearTimeout(R.timer);
     }
     R = {
-      g: g, qs: o.qs, mode: o.mode === 'race' ? 'race' : 'solo', onLine: o.onLine, onEnd: o.onEnd,
-      i: -1, lives: C.LIVES, score: 0, lines: 0, filled: 0, used: [], lock: false, over: false,
+      g: g, qs: o.qs, mode: race ? 'race' : 'solo', onLine: o.onLine, onEnd: o.onEnd,
+      i: from - 1, lives: o.lives > 0 ? Math.min(C.LIVES, o.lives | 0) : C.LIVES,
+      score: Math.max(0, o.score | 0), lines: Math.max(0, o.lines | 0), filled: 0, used: [], lock: false, over: false,
       t0: 0, pausedAt: 0, timer: 0
     };
     screen('round');
@@ -387,10 +394,8 @@
     renderGrid($('endPk'), '', pickSolo);
     if (current !== res) {
       current = res;
-      saveInfo = null;
-      saveState = !(res.score > 0) ? '' : lbApi('submit') ? 'saving' : 'failed';
       renderSave();
-      if (saveState) writePending(res).then(function () { saveRun(res); });
+      submitScore(res, function () { if (res === current) renderSave(); });
     }
     loadBoard();
   }
@@ -407,12 +412,15 @@
     setText($('endLines'), r.lines + '/' + r.total + ' ' + t.lines);
     renderSave();
   }
+  function saveText(st, a) {
+    var txt = { saving: t.saving, saved: t.saved, failed: t.failed, guest: t.guest }[st] || '';
+    return st === 'saved' && a && a.rank ? txt + ' · #' + a.rank : txt;
+  }
   function renderSave() {
-    var txt = { saving: t.saving, saved: t.saved, failed: t.failed, guest: t.guest }[saveState] || '';
-    if (saveState === 'saved' && saveInfo && saveInfo.rank) txt += ' · #' + saveInfo.rank;
-    setText($('saveText'), txt);
-    $('saveRow').className = 'save ' + saveState;
-    $('retry').hidden = !(saveState === 'failed' || saveState === 'guest');
+    var st = (current && current.saveState) || '';
+    setText($('saveText'), saveText(st, current && current.saveInfo));
+    $('saveRow').className = 'save ' + st;
+    $('retry').hidden = !(st === 'failed' || st === 'guest');
   }
   function countUp(e, to) {
     var seq = ++countSeq;
@@ -451,26 +459,35 @@
       return a && a.success === true ? a : Promise.reject({ code: 'NOT_ACKED' });
     });
   }
-  function setSave(res, s, a) {
-    if (res !== current) return;
-    saveState = s;
-    if (a) saveInfo = a;
-    renderSave();
+  function saveNote(res, s, a) {
+    res.saveState = s;
+    if (a) res.saveInfo = a;
+    call(res.onSave, s, res.saveInfo || null);
+  }
+  function submitScore(res, onSave) {
+    if (!res || !(res.score > 0)) return;
+    if (typeof onSave === 'function') res.onSave = onSave;
+    if (res.saved || res.busy) { call(res.onSave, res.saveState, res.saveInfo || null); return; }
+    if (!res.pend) {
+      saveNote(res, lbApi('submit') ? 'saving' : 'failed');
+      res.pend = writePending(res);
+    }
+    res.pend.then(function () { saveRun(res); });
   }
   function saveRun(res) {
-    if (!res || res.saved || saving === res) return;
-    if (!lbApi('submit')) { setSave(res, 'failed'); return; }
-    saving = res;
-    setSave(res, 'saving');
+    if (!res || res.saved || res.busy) return;
+    if (!lbApi('submit')) { saveNote(res, 'failed'); return; }
+    res.busy = true;
+    saveNote(res, 'saving');
     submit(res).then(function (a) {
-      saving = null;
+      res.busy = false;
       res.saved = true;
-      setSave(res, 'saved', a);
+      saveNote(res, 'saved', a);
       clearPendingAfter(res);
       if (res === current && scr === 'end') loadBoard();
     }, function (e) {
-      saving = null;
-      setSave(res, e && e.code === 'AUTH_REQUIRED' ? 'guest' : 'failed');
+      res.busy = false;
+      saveNote(res, e && e.code === 'AUTH_REQUIRED' ? 'guest' : 'failed');
     });
   }
   function flushPending() {
@@ -558,9 +575,9 @@
     loadBoard();
   }
 
-  function renderGrid(box, q, onPick) {
+  function renderGrid(box, q, onPick, curId) {
     var query = String(q || '').trim().toLowerCase();
-    var cur = R && R.g ? R.g.id : '';
+    var cur = curId !== undefined ? curId : R && R.g ? R.g.id : '';
     var any = false;
     box.textContent = '';
     [[t.packs, true], [t.singers, false]].forEach(function (sec) {
@@ -591,11 +608,12 @@
     sSet(KEY_LAST, g.id);
     playSolo(g);
   }
-  function openPicker(onPick) {
+  function openPicker(onPick, curId) {
     pickCb = typeof onPick === 'function' ? onPick : pickSolo;
+    pickerCur = curId !== undefined ? curId : undefined;
     pickerOpen = true;
     $('pkQ').value = '';
-    renderGrid($('pkList'), '', pickFromSheet);
+    renderGrid($('pkList'), '', pickFromSheet, pickerCur);
     $('pkList').scrollTop = 0;
     $('picker').hidden = false;
     syncClock();
@@ -629,7 +647,7 @@
     els = doc.querySelectorAll('[data-ta]');
     for (i = 0; i < els.length; i++) els[i].setAttribute('aria-label', t[els[i].getAttribute('data-ta')]);
     if (R) renderHud();
-    if (pickerOpen) renderGrid($('pkList'), $('pkQ').value, pickFromSheet);
+    if (pickerOpen) renderGrid($('pkList'), $('pkQ').value, pickFromSheet, pickerCur);
     if (scr === 'end' && endRes) {
       renderEnd();
       renderGrid($('endPk'), $('endQ').value, pickSolo);
@@ -642,10 +660,10 @@
     $('chip').addEventListener('click', function () { if (R && R.mode !== 'race') openPicker(); });
     $('pkX').addEventListener('click', closePicker);
     $('picker').addEventListener('click', function (e) { if (e.target === $('picker')) closePicker(); });
-    $('pkQ').addEventListener('input', function () { renderGrid($('pkList'), $('pkQ').value, pickFromSheet); });
+    $('pkQ').addEventListener('input', function () { renderGrid($('pkList'), $('pkQ').value, pickFromSheet, pickerCur); });
     $('endQ').addEventListener('input', function () { renderGrid($('endPk'), $('endQ').value, pickSolo); });
     $('again').addEventListener('click', function () { if (endRes && BY_ID[endRes.gid]) playSolo(BY_ID[endRes.gid]); });
-    $('retry').addEventListener('click', function () { saveRun(current); });
+    $('retry').addEventListener('click', function () { submitScore(current); });
     $('tabF').addEventListener('click', function () { showTab('friends'); });
     $('tabG').addEventListener('click', function () { showTab('global'); });
     doc.addEventListener('visibilitychange', syncClock);
@@ -686,10 +704,11 @@
     seenP = {};
     if (current && !current.saved && current.uid !== userId) {
       current = null;
-      saveState = '';
+      renderSave();
     }
     applyHost();
     flushPending();
+    if (typeof UBM.onInit === 'function') call(UBM.onInit, cfg || {});
   }
   function boot() {
     var u = usion();
@@ -706,7 +725,20 @@
 
   var UBM = root.UBM = {
     boot: null,
+    onInit: null,
     solo: solo,
+    submitScore: submitScore,
+    saveText: function (st, a) { return saveText(st, a); },
+    userId: function () { return userId; },
+    lang: function () { return lang; },
+    addStrings: function (o) {
+      Object.keys(TXT).forEach(function (l) {
+        var add = o && (o[l] || o.mn);
+        if (add) Object.keys(add).forEach(function (k) { TXT[l][k] = add[k]; });
+      });
+    },
+    avatar: function (e, g) { paintAv(e, g); },
+    openProfile: openProfile,
     startRound: startRound,
     showEnd: showEnd,
     openPicker: openPicker,
