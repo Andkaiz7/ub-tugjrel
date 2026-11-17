@@ -53,6 +53,7 @@ def serve():
 
 def open_page(ctx, query):
     pg = ctx.new_page()
+    pg.route('**/ugee-buu-mart/media-data.js', lambda r: r.fulfill(status=200, body='window.MEDIA={"img":{},"pre":{}};', content_type='application/javascript'))
     errors = []
     pg.on('console', lambda m: m.type == 'error' and errors.append(m.text))
     pg.on('pageerror', lambda e: errors.append(str(e)))
