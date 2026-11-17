@@ -22,7 +22,7 @@
       change: 'Дуучин солих', running: 'Тоглолт явж байна. Дараагийнхыг хүлээнэ үү.', waitOthers: 'Бусдыг хүлээж байна…',
       youWon: 'Чи түрүүллээ!', won: '%s түрүүллээ!', draw: 'Тэнцлээ!', hostLeft: 'Хост гарсан байна.', left: 'гарсан', away: 'ганцаараа', hallBack: 'Танхим руу',
       chat: 'Чат', chatPh: 'Өөрөө бичих…', send: 'Илгээх', reconnecting: 'Холболт сэргээж байна…',
-      connecting: 'Холбогдож байна…', connFail: 'Холбогдож чадсангүй', reconnect: 'Дахин холбогдох', player: 'Тоглогч',
+      connecting: 'Холбогдож байна…', connFail: 'Холбогдож чадсангүй', reconnect: 'Дахин холбогдох', player: 'Тоглогч', singerCount: 'дуучин',
       phrases: ['Сайн уу! 👋', 'Амжилт!', 'Хурдан байна шүү!', 'Энийг мэдэхгүй нээ 😅', 'Ха ха 😂', 'Дахиад нэг!', 'Гайхалтай!', 'Би түрүүлнэ 😎']
     },
     en: {
@@ -31,7 +31,7 @@
       change: 'Change singer', running: 'A match is on. Wait for the next one.', waitOthers: 'Waiting for others…',
       youWon: 'You won!', won: '%s won!', draw: 'It is a draw!', hostLeft: 'The host has left.', left: 'left', away: 'solo', hallBack: 'Back to lobby',
       chat: 'Chat', chatPh: 'Type a message…', send: 'Send', reconnecting: 'Reconnecting…',
-      connecting: 'Connecting…', connFail: 'Could not connect', reconnect: 'Reconnect', player: 'Player',
+      connecting: 'Connecting…', connFail: 'Could not connect', reconnect: 'Reconnect', player: 'Player', singerCount: 'singers',
       phrases: ['Hi! 👋', 'Good luck!', 'You are fast!', 'No idea on this one 😅', 'Haha 😂', 'One more!', 'Amazing!', 'I am winning 😎']
     }
   });
@@ -50,6 +50,7 @@
   var ready = false;
   var away = false;
   var pickGid = null;
+  var pickN = C.ROUND;
   var buf = {};
   var holeAt = 0;
   var syncAt = 0;
@@ -155,8 +156,12 @@
     rt('player_info', infos[me]);
     renderAll();
   }
+  function validN(v) {
+    var n = typeof v === 'number' ? v : Number(v);
+    return C.COUNTS.indexOf(n) >= 0 ? n : C.ROUND;
+  }
   function sendPick() {
-    if (isHost() && pickGid) rt('pick', { gid: pickGid });
+    if (isHost() && pickGid) rt('pick', { gid: pickGid, n: pickN });
   }
   function requestSync(seq) {
     if (!joinedOk || !game('requestSync')) return;
@@ -194,6 +199,8 @@
     leftAt = {};
     ready = false;
     away = false;
+    pickGid = null;
+    pickN = C.ROUND;
     buf = {};
     holeAt = 0;
     syncAt = 0;
@@ -253,7 +260,7 @@
     arrive(me);
     hostId = d.host_id || ids[0] || hostId || order[0];
     if (hostId && !present[hostId] && !leftAt[hostId]) leftAt[hostId] = now();
-    if (isHost() && !pickGid) pickGid = defaultPick();
+    if (isHost() && !pickGid) { pickGid = defaultPick(); pickN = validN(UBM.state().n); }
     lastIn = now();
     sendInfo();
     sendPick();
@@ -276,7 +283,7 @@
     reset(d && d.roomId);
     hostId = me;
     order = me ? [me] : [];
-    if (!pickGid) pickGid = defaultPick();
+    if (!pickGid) { pickGid = defaultPick(); pickN = validN(UBM.state().n); }
     showHall();
   }
   function onConn(s) {
@@ -292,7 +299,7 @@
       infos[id] = { name: str(d.name, 40), avatar: typeof d.avatar === 'string' && /^https?:/.test(d.avatar) ? d.avatar : '', ready: d.ready === true, away: d.away === true };
       renderAll();
     } else if (m.action_type === 'pick') {
-      if (id === hostId) setPick(d.gid, false);
+      if (id === hostId) setPick(d.gid, d.n, false);
     } else if (m.action_type === 'quick_chat') {
       var ph = normChat(d.phrase);
       if (ph && now() - (chatFrom[id] || 0) >= CHAT_GAP) {
@@ -351,9 +358,13 @@
     var seq = seqOf(a);
     var d = a.action_data || {};
     if (a.action_type === 'start') {
-      if (a.player_id !== hostId || typeof d.m !== 'string' || matches[d.m] || !UBM.groupById(d.gid) || !Array.isArray(d.roster)) return false;
+      var g = UBM.groupById(d.gid);
+      if (a.player_id !== hostId || typeof d.m !== 'string' || matches[d.m] || !g || !Array.isArray(d.roster)) return false;
+      var n = validN(d.n);
+      var total = Math.min(n, g.songs.reduce(function (acc, s) { return acc + s.x.length; }, 0));
+      if (total <= 0) return false;
       var roster = d.roster.filter(function (id, i) { return typeof id === 'string' && d.roster.indexOf(id) === i; }).slice(0, MAX);
-      var M = matches[d.m] = { m: d.m, seed: d.seed >>> 0, gid: d.gid, roster: roster, acts: [], at: now(), seq: seq, ended: false, upto: 0 };
+      var M = matches[d.m] = { m: d.m, seed: d.seed >>> 0, gid: g.id, n: n, total: total, roster: roster, acts: [], at: now(), seq: seq, ended: false, upto: 0 };
       if (!latest || seq >= latest.seq) latest = M;
       if (pendingStart && pendingStart.m === d.m) pendingStart = null;
       return true;
@@ -369,7 +380,7 @@
     if (a.action_type === 'ans') {
       var M2 = matches[d.m];
       var q = d.q | 0;
-      if (!M2 || M2.roster.indexOf(a.player_id) < 0 || q < 0 || q >= C.ROUND) return false;
+      if (!M2 || M2.roster.indexOf(a.player_id) < 0 || q < 0 || q >= M2.total) return false;
       if (M2.ended && !(seq && seq <= M2.upto)) return false;
       M2.acts.push({ player_id: a.player_id, q: q, ok: d.ok === true, ms: Math.min(3600000, Math.max(0, +d.ms || 0)), lives: Math.max(0, Math.min(C.LIVES, d.lives | 0)), seq: seq });
       if (a.player_id === me && echo && echo.q === q) echo = null;
@@ -381,7 +392,7 @@
   function actsOf(M) {
     return M.ended ? M.acts.filter(function (a) { return !a.seq || a.seq <= M.upto; }) : M.acts;
   }
-  function rowsOf(M) { return C.standings(M.roster, actsOf(M)); }
+  function rowsOf(M) { return C.standings(M.roster, actsOf(M), M.total); }
   function rowOf(M, id) { return rowsOf(M).filter(function (r) { return r.id === id; })[0] || null; }
   function isDraw(rs) {
     return !rs.length || rs[0].score === 0 || (!!rs[1] && rs[1].score === rs[0].score && rs[1].ms === rs[0].ms);
@@ -414,14 +425,14 @@
     racingM = M.m;
     if (!M.qs) {
       var rnd = C.rng(M.seed);
-      M.qs = C.round(g, C.pickRefs(g, [], C.ROUND, rnd), rnd);
+      M.qs = C.round(g, C.pickRefs(g, [], M.n, rnd), rnd);
     }
     var row = rowOf(M, me);
     if (row && row.done) { finishMine(M, null); return; }
     raceLive = true;
     closeChat();
     UBM.startRound({
-      group: g, qs: M.qs, mode: 'race',
+      group: g, qs: M.qs, n: M.n, mode: 'race',
       from: row ? row.answered : 0, lives: row ? row.lives : C.LIVES, score: row ? row.score : 0, lines: okCount(M, me),
       onLine: function (q, ok, ms, lives) { sendAns(M, { m: M.m, q: q, ok: ok, ms: ms, lives: lives }, 1); },
       onEnd: function (res) { finishMine(M, res); }
@@ -438,8 +449,8 @@
   function buildRes(M) {
     var row = rowOf(M, me) || { score: 0, answered: 0, lives: 0 };
     return {
-      id: 'race-' + M.m + '-' + me, uid: UBM.userId(), mode: 'race', gid: M.gid, score: row.score,
-      lives: row.lives, lines: okCount(M, me), answered: row.answered, total: C.ROUND
+      id: 'race-' + M.m + '-' + me, uid: UBM.userId(), mode: 'race', gid: M.gid, n: M.n, score: row.score,
+      lives: row.lives, lines: okCount(M, me), answered: row.answered, total: M.total
     };
   }
   function raced() {
@@ -451,6 +462,7 @@
     r.id = 'race-' + M.m + '-' + me;
     r.mode = 'race';
     r.gid = M.gid;
+    r.n = M.n;
     M.res = r;
     var list = raced();
     if (list.indexOf(M.m) >= 0) return;
@@ -466,8 +478,8 @@
   function checkEnd(M) {
     if (!M || M.ended || M.endSent || !joinedOk || behind()) return;
     M.roster.forEach(function (id) { if (id !== me && !present[id] && !leftAt[id]) leftAt[id] = now(); });
-    var rs = C.standings(M.roster, M.acts);
-    if (now() - M.at >= MATCH_MS || rs.every(function (r) { return r.done || gone(r.id); })) sendEnd(M);
+    var rs = C.standings(M.roster, M.acts, M.total);
+    if (now() - M.at >= MATCH_MS * Math.max(1, M.total / C.ROUND) || rs.every(function (r) { return r.done || gone(r.id); })) sendEnd(M);
   }
   function sendEnd(M) {
     if (!game('action')) return;
@@ -515,7 +527,7 @@
     var roster = players().filter(isReady).slice(0, MAX);
     var data = {
       m: me + '-' + now().toString(36) + Math.random().toString(36).slice(2, 6),
-      seed: (Math.random() * 4294967296) >>> 0, gid: pickGid, roster: roster
+      seed: (Math.random() * 4294967296) >>> 0, gid: pickGid, n: pickN, roster: roster
     };
     pendingStart = { m: data.m, at: now() };
     $('startBtn').disabled = true;
@@ -531,9 +543,11 @@
     var ps = players();
     return isHost() && joinedOk && !!pickGid && ps.length >= 2 && ps.every(isReady) && !(latest && !latest.ended) && !pendingStart;
   }
-  function setPick(gid, mineToo) {
-    if (!UBM.groupById(gid) || gid === pickGid) return;
+  function setPick(gid, n, mineToo) {
+    var nextN = validN(n);
+    if (!UBM.groupById(gid) || (gid === pickGid && nextN === pickN)) return;
     pickGid = gid;
+    pickN = nextN;
     Object.keys(infos).forEach(function (id) { infos[id].ready = false; });
     if (mineToo) sendPick();
     if (ready) {
@@ -584,7 +598,13 @@
     $('hallAv').hidden = !g;
     if (g) UBM.avatar($('hallAv'), g);
     setText($('hallSN'), g ? g.name : t('hostPicks'));
-    setText($('hallSS'), host ? t('change') : g ? '♪ ' + C.ROUND + ' ' + t('lines') : '');
+    var sub = [];
+    if (g) {
+      if (g.mix) sub.push(g.mix.length + ' ' + t('singerCount'));
+      sub.push(Math.min(pickN, g.songs.reduce(function (n, s) { return n + s.x.length; }, 0)) + ' ' + t('lines'));
+    }
+    if (host) sub.push(t('change'));
+    setText($('hallSS'), (g && !host ? '♪ ' : '') + sub.join(' · '));
     setText($('hallCount'), ids.length + '/' + MAX);
     $('hallInvite').hidden = !game('invite') || !joinedOk;
     var sig = JSON.stringify([ids, hostId, ids.map(function (id) { return [nameOf(id), isReady(id), !!(infos[id] && infos[id].away), infos[id] && infos[id].avatar]; })]);
@@ -620,7 +640,7 @@
     var show = !!(inRoom && raceLive && M && racingM === M.m && UBM.state().screen === 'round');
     $('stripRow').hidden = !show;
     if (!show) { sigs.strip = ''; return; }
-    var rs = C.standings(M.roster, M.acts);
+    var rs = C.standings(M.roster, M.acts, M.total);
     var sig = JSON.stringify(rs.map(function (r) { return [r.id, r.answered, r.score, r.done, gone(r.id), nameOf(r.id)]; }));
     if (sigs.strip === sig) return;
     var prev = sigs.stripScores || {};
@@ -631,9 +651,9 @@
     rs.forEach(function (r) {
       var c = el('div', 'pc' + (r.id === me ? ' me' : '') + (r.done ? ' done' : '') + (gone(r.id) ? ' gone' : ''));
       c.setAttribute('data-pid', r.id);
-      c.setAttribute('aria-label', nameOf(r.id) + ' ' + r.answered + '/' + C.ROUND + ' ' + r.score);
+      c.setAttribute('aria-label', nameOf(r.id) + ' ' + r.answered + '/' + M.total + ' ' + r.score);
       c.appendChild(avatarOf(r.id));
-      c.appendChild(el('span', 'n', r.answered + '/' + C.ROUND));
+      c.appendChild(el('span', 'n', r.answered + '/' + M.total));
       c.appendChild(el('span', 's', String(r.score)));
       if (prev[r.id] != null && prev[r.id] !== r.score) c.classList.add('bump');
       sigs.stripScores[r.id] = r.score;
@@ -670,7 +690,7 @@
       if (gone(r.id)) nm.appendChild(el('span', 'tag dim', t('left')));
       row.appendChild(nm);
       sc.appendChild(el('b', '', String(r.score)));
-      sc.appendChild(el('small', '', (r.done ? '' : '… ') + r.answered + '/' + C.ROUND));
+      sc.appendChild(el('small', '', (r.done ? '' : '… ') + r.answered + '/' + M.total));
       row.appendChild(sc);
       if (!isMe) {
         row.type = 'button';
@@ -753,7 +773,7 @@
 
   function bind() {
     $('hallSinger').addEventListener('click', function () {
-      if (isHost()) UBM.openPicker(function (g) { setPick(g.id, true); }, pickGid);
+      if (isHost()) UBM.openPicker(function (g, n) { setPick(g.id, n, true); }, pickGid, pickN);
     });
     $('readyBtn').addEventListener('click', function () {
       if (joinFail) { join(); return; }

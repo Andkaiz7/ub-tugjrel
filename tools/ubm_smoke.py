@@ -252,15 +252,20 @@ def main_flow(b):
     assert pg.is_visible('#picker')
     assert pg.evaluate("document.querySelector('#pkList h4').textContent") == 'Багц'
     assert pg.evaluate("document.querySelectorAll('#pkList .sg').length") == n_groups
-    assert pg.evaluate("document.querySelector('#pkList .sg.cur').dataset.gid") == PICK
+    assert pg.evaluate("document.querySelector('#pkList .sg.on').dataset.gid") == PICK
+    assert pg.get_attribute('#pkList .sg[data-gid="%s"]' % PICK, 'aria-pressed') == 'true'
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(OUT / 'picker.png'))
     pg.click('#pkX')
     assert pg.is_hidden('#picker') and st(pg)['screen'] == 'round' and st(pg)['q'] == 1
     pg.click('#chip')
+    pg.click('#pkList .sg[data-gid="%s"]' % PICK)
+    assert pg.is_disabled('#pkGo')
     pg.fill('#pkQ', 'чойжоо')
     assert pg.evaluate("[...document.querySelectorAll('#pkList .sg')].map(e => e.dataset.gid)") == [CHIP_PICK]
     pg.click('#pkList .sg[data-gid="%s"]' % CHIP_PICK)
+    assert not pg.is_disabled('#pkGo')
+    pg.click('#pkGo')
     wait_round(pg)
     s = st(pg)
     assert s['groupId'] == CHIP_PICK and s['q'] == 0 and s['score'] == 0, s
@@ -345,7 +350,9 @@ def hung_storage(b):
     t = pg.evaluate('performance.now()')
     assert t < 3000, 'round visible within 3 s of navigation with hung storage: %d ms' % t
     pg.click('#chip')
+    pg.evaluate("document.querySelectorAll('#pkList .sg.on').forEach(e => e.click())")
     pg.click('#pkList .sg[data-gid="%s"]' % CHIP_PICK)
+    pg.click('#pkGo')
     pg.wait_for_function("UBM.state().groupId === '%s' && UBM.state().screen === 'round'" % CHIP_PICK, timeout=2000)
     for _ in range(3):
         wrong_tap(pg)
@@ -547,7 +554,9 @@ def media_flow(b):
     pg.click('#chip')
     assert pg.is_visible('#picker')
     pg.wait_for_function("!UBM.music().playing", timeout=2000)
+    pg.evaluate("document.querySelectorAll('#pkList .sg.on').forEach(e => e.click())")
     pg.click('#pkList .sg[data-gid="%s"]' % CHIP_PICK)
+    pg.click('#pkGo')
     wait_round(pg)
     assert st(pg)['groupId'] == CHIP_PICK
     assert pg.evaluate("document.querySelectorAll('#chipAv .avimg').length") == 0
@@ -570,7 +579,9 @@ def media_flow(b):
 
     if not seen_no_pre:
         pg.click('#chip')
+        pg.evaluate("document.querySelectorAll('#pkList .sg.on').forEach(e => e.click())")
         pg.click('#pkList .sg[data-gid="%s"]' % GUARANTEED_GID)
+        pg.click('#pkGo')
         wait_round(pg)
         for q in range(7):
             if pg.evaluate('UBM.current().song') == no_pre_guar:
@@ -581,6 +592,8 @@ def media_flow(b):
                 break
             answer_line(pg)
     assert seen_no_pre
+    while pg.evaluate('UBM.current().song') == no_pre_guar:
+        answer_line(pg)
     pg.wait_for_function("UBM.music().playing", timeout=3000)
 
     for _ in range(3):
@@ -673,12 +686,95 @@ def default_autoplay_flow(b):
     pg.context.close()
 
 
+def multi_flow(b):
+    js, _, _ = media_fixture(START_GID, all_pre=True)
+    pg, errors = new_page(b, {'width': 390, 'height': 844}, True, setup=media_setup(js))
+    wait_round(pg)
+    pg.click('#chip')
+    assert pg.is_visible('#picker')
+    assert pg.get_attribute('#pkCounts', 'role') == 'radiogroup'
+    radios = pg.evaluate("[...document.querySelectorAll('#pkCounts [role=\"radio\"]')].map(e => ({n: +e.dataset.n, checked: e.getAttribute('aria-checked'), h: e.getBoundingClientRect().height}))")
+    assert [r['n'] for r in radios] == [5, 10, 20, 30] and all(r['h'] >= 44 for r in radios), radios
+    assert [r['checked'] for r in radios] == ['false', 'true', 'false', 'false']
+
+    pg.evaluate("document.querySelectorAll('#pkList .sg.on').forEach(e => e.click())")
+    assert pg.is_disabled('#pkGo')
+    pg.click('#pkList .sg[data-gid="%s"]' % START_GID)
+    assert pg.get_attribute('#pkList .sg[data-gid="%s"]' % START_GID, 'aria-pressed') == 'true'
+    pg.fill('#pkQ', 'чойжоо')
+    pg.click('#pkList .sg[data-gid="%s"]' % CHIP_PICK)
+    pg.fill('#pkQ', '')
+    sel = pg.evaluate("[...document.querySelectorAll('#pkList .sg.on')].map(e => e.dataset.gid).sort()")
+    assert sel == sorted([START_GID, CHIP_PICK]), sel
+    assert pg.evaluate("getComputedStyle(document.querySelector('#pkList .sg.on .ck')).display") != 'none'
+    assert not pg.is_disabled('#pkGo') and '(2)' in pg.text_content('#pkGo')
+    pg.click('#pkCounts button[data-n="5"]')
+    assert pg.get_attribute('#pkCounts button[data-n="5"]', 'aria-checked') == 'true'
+    pg.wait_for_timeout(400)
+    layout = pg.evaluate("""() => {
+      const f = document.getElementById('pkFoot').getBoundingClientRect();
+      const l = document.getElementById('pkList').getBoundingClientRect();
+      return { fh: f.height, ftop: f.top, fbot: f.bottom, lbot: l.bottom, ih: innerHeight };
+    }""")
+    assert layout['fh'] > 0 and layout['fbot'] <= layout['ih'] + 1 and layout['lbot'] <= layout['ftop'] + 1, layout
+    pg.screenshot(path=str(OUT / 'picker-multi.png'))
+
+    pg.click('#pkGo')
+    wait_round(pg)
+    mix_id = '+'.join(sorted([START_GID, CHIP_PICK]))
+    s = st(pg)
+    assert s['groupId'] == mix_id and s['total'] == 5 and s['n'] == 5, s
+    assert pg.text_content('#qn') == '1/5'
+
+    q_gids = []
+    for k in range(5):
+        cur = pg.evaluate('UBM.current()')
+        assert cur['gid'] in (START_GID, CHIP_PICK), cur
+        assert pg.text_content('#chipName') == pg.evaluate("g => UBM.groupById(g).name", cur['gid'])
+        if cur['gid'] == START_GID:
+            pg.wait_for_function("u => UBM.music().src === u", arg=URL_A, timeout=3000)
+            pg.wait_for_function("document.querySelectorAll('#chipAv .avimg').length === 1", timeout=3000)
+        else:
+            pg.wait_for_function("u => UBM.music().src === u", arg=URL_B, timeout=3000)
+            assert pg.evaluate("document.querySelectorAll('#chipAv .avimg').length") == 0
+        q_gids.append(cur['gid'])
+        answer_line(pg)
+    assert set(q_gids) == {START_GID, CHIP_PICK}, q_gids
+    pg.wait_for_function("UBM.state().screen === 'end'", timeout=3000)
+    assert pg.text_content('#endLines').startswith('5/5')
+    pg.wait_for_selector('#retry:not([hidden])', timeout=5000)
+    sub = pg.evaluate('__stub.calls.submit')
+    assert len(sub) == 1 and sub[0]['meta']['singer'] == mix_id and sub[0]['meta']['n'] == 5, sub
+
+    pg.click('#again')
+    wait_round(pg)
+    assert st(pg)['groupId'] == mix_id and st(pg)['total'] == 5
+
+    pg.reload()
+    wait_round(pg)
+    s = st(pg)
+    assert s['groupId'] == mix_id and s['total'] == 5 and pg.text_content('#qn') == '1/5', s
+    assert pg.evaluate("__stub.store['ubm:last']") == mix_id
+    assert pg.evaluate("__stub.store['ubm:n']") == 5
+
+    res20 = pg.evaluate("""ids => {
+      const g = UBM.groupById(ids);
+      const r = UBMCore.rng(42);
+      const qs = UBMCore.round(g, UBMCore.pickRefs(g, [], 20, r), r);
+      return qs.map(q => ({ len: q.answer.length, gid: q.gid }));
+    }""", mix_id)
+    assert len(res20) == 20 and all(isinstance(x['len'], int) and 1 <= x['len'] <= 5 and x['gid'] in (START_GID, CHIP_PICK) for x in res20), res20
+    assert not errors, errors
+    pg.context.close()
+
+
 httpd = serve()
 BASE = 'http://127.0.0.1:%d' % httpd.server_address[1]
 with sync_playwright() as p:
     browser = p.chromium.launch(args=['--autoplay-policy=no-user-gesture-required'])
     main_flow(browser)
     media_flow(browser)
+    multi_flow(browser)
     shots(browser, {'width': 360, 'height': 640}, 'small')
     shots(browser, {'width': 390, 'height': 844}, 'en', '?lang=en')
     no_host(browser)

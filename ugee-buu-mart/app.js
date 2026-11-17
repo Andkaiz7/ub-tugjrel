@@ -8,7 +8,7 @@
       global: 'Дэлхий', next: 'Дараагийн дуучин', perfect: 'Төгс!', done: 'Дууслаа', out: 'Амь дууслаа',
       saving: 'Хадгалж байна…', saved: 'Хадгалагдлаа', failed: 'Хадгалагдаагүй', guest: 'Нэвтэрч байж хадгална',
       retry: 'Дахин илгээх', loading: 'Ачаалж байна…', empty: 'Одоохондоо хоосон', error: 'Ачаалж чадсангүй',
-      me: 'Би', mute: 'Дуу хаах', board: 'Тэргүүлэгчид'
+      me: 'Би', mute: 'Дуу хаах', board: 'Тэргүүлэгчид', start: 'Эхлэх', count: 'Дууны тоо'
     },
     en: {
       lives: 'Lives', score: 'Score', lines: 'lines', pick: 'Pick a singer', search: 'Search', packs: 'Packs',
@@ -16,10 +16,11 @@
       global: 'Global', next: 'Next singer', perfect: 'Perfect!', done: 'Finished', out: 'Out of lives',
       saving: 'Saving…', saved: 'Saved', failed: 'Not saved', guest: 'Sign in to save',
       retry: 'Retry', loading: 'Loading…', empty: 'No records yet', error: 'Could not load',
-      me: 'Me', mute: 'Mute', board: 'Leaderboard'
+      me: 'Me', mute: 'Mute', board: 'Leaderboard', start: 'Start', count: 'Songs'
     }
   };
   var KEY_LAST = 'ubm:last';
+  var KEY_N = 'ubm:n';
   var KEY_PEND = 'ubm:pend';
   var KEY_MUTE = 'ubm:mute';
   var BGM_VOL = 0.3;
@@ -36,6 +37,7 @@
   var GROUPS = root.LYRICS && Array.isArray(root.LYRICS.groups) ? root.LYRICS.groups : [];
   var SORTED = GROUPS.slice().sort(function (a, b) { return (b.views || 0) - (a.views || 0); });
   var BY_ID = {};
+  var MIX = {};
   GROUPS.forEach(function (g) { BY_ID[g.id] = g; });
 
   var doc = root.document;
@@ -55,7 +57,10 @@
   var pickCb = null;
   var endRes = null;
   var current = null;
-  var pickerCur = null;
+  var pickerSel = [];
+  var pickerN = C ? C.ROUND : 10;
+  var roundN = C ? C.ROUND : 10;
+  var nTouched = false;
   var tab = 'friends';
   var boardSeq = 0;
   var flushing = false;
@@ -176,6 +181,59 @@
       return s;
     });
   }
+  function validCount(v) {
+    return typeof v === 'number' && C && C.COUNTS && C.COUNTS.indexOf(v) >= 0 ? v : (C ? C.ROUND : 10);
+  }
+  function groupById(id) {
+    if (typeof id !== 'string' || !id) return null;
+    if (hasOwn.call(BY_ID, id)) return BY_ID[id];
+    if (hasOwn.call(MIX, id)) return MIX[id];
+    if (id.indexOf('+') < 0) return null;
+    var raw = id.split('+');
+    var seen = {};
+    var parts = [];
+    for (var i = 0; i < raw.length; i++) {
+      var p = raw[i];
+      if (!hasOwn.call(BY_ID, p)) return null;
+      if (!seen[p] && parts.length < 20) {
+        seen[p] = true;
+        parts.push(BY_ID[p]);
+      }
+    }
+    if (!parts.length) return null;
+    var g = C.mix(parts);
+    if (!g) return null;
+    if (hasOwn.call(MIX, g.id)) return MIX[g.id];
+    if (g.mix) MIX[g.id] = g;
+    return g;
+  }
+  function sourceGids(g) {
+    return g && Array.isArray(g.mix) ? g.mix : g ? [g.id] : [];
+  }
+  function loadAllSeen(g) {
+    var gids = sourceGids(g);
+    return Promise.all(gids.map(loadSeen)).then(function (list) {
+      var all = [];
+      var seenSet = {};
+      for (var i = 0; i < list.length; i++) {
+        var arr = list[i].ids;
+        for (var j = 0; j < arr.length; j++) {
+          if (!seenSet[arr[j]]) {
+            seenSet[arr[j]] = true;
+            all.push(arr[j]);
+          }
+        }
+      }
+      return all;
+    });
+  }
+  function loadCount() {
+    if (!nTouched) roundN = validCount(lsGet(KEY_N));
+    return sGet(KEY_N, FAST_MS).then(function (v) {
+      if (!nTouched) roundN = validCount(v);
+      return roundN;
+    });
+  }
   function excerpts(g) {
     return g.songs.reduce(function (n, s) { return n + s.x.length; }, 0);
   }
@@ -183,12 +241,13 @@
     var list = SORTED.filter(function (g) { return !g.pack; });
     if (list.length) loadSeen(list[0].id);
     return sGet(KEY_LAST, FAST_MS).then(function (gid) {
-      if (typeof gid === 'string' && BY_ID[gid]) return BY_ID[gid];
+      var saved = groupById(gid);
+      if (saved) return saved;
       var i = 0;
       function next() {
         if (i >= list.length) return list[0] || SORTED[0];
         var g = list[i++];
-        return loadSeen(g.id).then(function (s) { return excerpts(g) - s.ids.length >= C.ROUND ? g : next(); });
+        return loadSeen(g.id).then(function (s) { return excerpts(g) - s.ids.length >= roundN ? g : next(); });
       }
       return next();
     });
@@ -373,7 +432,8 @@
     }
   }
   function music(Q) {
-    var url = Q && R && R.g ? mediaPre(R.g.id, Q.song) : '';
+    var gid = Q && Q.gid ? Q.gid : (R && R.g ? R.g.id : '');
+    var url = Q && gid ? mediaPre(gid, Q.song) : '';
     var srcEl = $('songSrc');
     if (srcEl) srcEl.hidden = !url;
     if (!url) {
@@ -480,24 +540,27 @@
 
   function solo() {
     var seq = ++soloSeq;
-    return autoGroup().then(function (g) { if (seq === soloSeq && g) playSolo(g); });
+    return Promise.all([autoGroup(), loadCount()]).then(function (res) {
+      if (seq === soloSeq && res[0]) playSolo(res[0], res[1]);
+    });
   }
-  function playSolo(g) {
+  function playSolo(g, n) {
     var seq = ++soloSeq;
-    return loadSeen(g.id).then(function (s) {
+    var count = n != null ? validCount(n) : roundN;
+    return loadAllSeen(g).then(function (seenIds) {
       if (seq !== soloSeq) return;
       var rnd = C.rng((Math.random() * 4294967296) >>> 0);
-      var qs = C.round(g, C.pickRefs(g, s.ids, C.ROUND, rnd), rnd);
-      if (qs.length) startRound({ group: g, qs: qs, mode: 'solo' });
+      var qs = C.round(g, C.pickRefs(g, seenIds, count, rnd), rnd);
+      if (qs.length) startRound({ group: g, qs: qs, n: count, mode: 'solo' });
     });
   }
   function startRound(o) {
     o = o || {};
-    var g = typeof o.group === 'string' ? BY_ID[o.group] : o.group;
+    var g = typeof o.group === 'string' ? groupById(o.group) : o.group;
     if (!g) return;
     var race = o.mode === 'race';
     if (!Array.isArray(o.qs) || !o.qs.length) {
-      if (!race) playSolo(g);
+      if (!race) playSolo(g, o.n);
       return;
     }
     var from = Math.max(0, Math.min(o.qs.length, o.from | 0));
@@ -507,7 +570,7 @@
       clearTimeout(R.timer);
     }
     R = {
-      g: g, qs: o.qs, mode: race ? 'race' : 'solo', onLine: o.onLine, onEnd: o.onEnd,
+      g: g, qs: o.qs, n: o.n != null ? validCount(o.n) : o.qs.length, mode: race ? 'race' : 'solo', onLine: o.onLine, onEnd: o.onEnd,
       i: from - 1, lives: o.lives > 0 ? Math.min(C.LIVES, o.lives | 0) : C.LIVES,
       score: Math.max(0, o.score | 0), lines: Math.max(0, o.lines | 0), filled: 0, used: [], lock: false, over: false,
       t0: 0, pausedAt: 0, timer: 0
@@ -524,12 +587,14 @@
     R.t0 = clock();
     R.pausedAt = 0;
     syncClock();
-    if (R.mode === 'solo') markSeen(R.g.id, R.qs[R.i].id);
+    if (R.mode === 'solo') markSeen(R.qs[R.i].gid || R.g.id, R.qs[R.i].id);
     renderQ();
     renderHud();
   }
   function renderHud() {
-    var g = R && R.g;
+    var Q = R && R.i >= 0 && R.i < R.qs.length ? R.qs[R.i] : null;
+    var qg = Q && Q.gid ? groupById(Q.gid) : null;
+    var g = qg || (R && R.g);
     setText($('chipName'), g ? g.name : '');
     paintAv($('chipAv'), g);
     $('chip').disabled = !!(R && R.mode === 'race');
@@ -633,7 +698,7 @@
     clearTimeout(r.timer);
     var res = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      uid: userId, mode: r.mode, gid: r.g.id, score: r.score, lives: r.lives, lines: r.lines,
+      uid: userId, mode: r.mode, gid: r.g.id, n: r.n || r.qs.length, score: r.score, lives: r.lives, lines: r.lines,
       answered: Math.min(r.i + 1, r.qs.length), total: r.qs.length
     };
     if (typeof r.onEnd === 'function') call(r.onEnd, res);
@@ -648,7 +713,7 @@
     $('endQ').value = '';
     renderEnd();
     countUp($('endScore'), res.score || 0);
-    renderGrid($('endPk'), '', pickSolo);
+    renderGrid($('endPk'), '', function (g) { pickSolo(g, roundN); });
     if (current !== res) {
       current = res;
       renderSave();
@@ -659,7 +724,7 @@
   function renderEnd() {
     var r = endRes;
     if (!r) return;
-    var g = BY_ID[r.gid];
+    var g = groupById(r.gid);
     var out = r.lives <= 0;
     setText($('endHead'), out ? t.out : r.lines >= r.total && r.lives >= C.LIVES ? t.perfect : t.done);
     $('endHead').className = out ? 'out' : '';
@@ -692,26 +757,29 @@
     })();
   }
 
+  function boardScore(r) {
+    return Math.round((r.score || 0) * C.ROUND / Math.max(1, r.total || r.n || C.ROUND));
+  }
   function pendingOf(res) {
-    return { id: res.id, uid: res.uid, score: res.score, lines: res.lines, gid: res.gid };
+    return { id: res.id, uid: res.uid, score: res.score, lines: res.lines, gid: res.gid, n: res.n || res.total || C.ROUND, total: res.total || res.n || C.ROUND };
   }
   function writePending(res) {
     return sGet(KEY_PEND).then(function (p) {
-      if (p && p.uid === res.uid && p.id !== res.id && typeof p.score === 'number' && p.score >= res.score) return;
+      if (p && p.uid === res.uid && p.id !== res.id && typeof p.score === 'number' && boardScore(p) >= boardScore(res)) return;
       return sSet(KEY_PEND, pendingOf(res));
     });
   }
   function clearPendingAfter(res) {
     return sGet(KEY_PEND).then(function (p) {
       if (!p) return;
-      if (p.id === res.id || !(p.score > res.score)) return sSet(KEY_PEND, null);
+      if (p.id === res.id || !(boardScore(p) > boardScore(res))) return sSet(KEY_PEND, null);
       flushPending();
     });
   }
   function submit(res) {
     if (!lbApi('submit')) return Promise.reject({ code: 'UNAVAILABLE' });
     return timed(attempt(function () {
-      return Usion.leaderboard.submit(res.score, { lines: res.lines, singer: res.gid });
+      return Usion.leaderboard.submit(boardScore(res), { lines: res.lines, singer: res.gid, n: res.total || res.n || C.ROUND, score: res.score });
     }), 15000).then(function (a) {
       return a && a.success === true ? a : Promise.reject({ code: 'NOT_ACKED' });
     });
@@ -832,7 +900,36 @@
     loadBoard();
   }
 
-  function renderGrid(box, q, onPick, curId) {
+  function checkBadge() {
+    var s = el('span', 'ck');
+    s.setAttribute('aria-hidden', 'true');
+    var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    var path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M3.2 8.4l3.1 3.1 6.5-6.8');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '2.6');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    s.appendChild(svg);
+    return s;
+  }
+  function togglePick(g, b) {
+    var at = pickerSel.indexOf(g.id);
+    if (at >= 0) pickerSel.splice(at, 1);
+    else {
+      if (pickerSel.length >= 20) return;
+      pickerSel.push(g.id);
+    }
+    var on = at < 0;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+    renderPickerFoot();
+  }
+  function renderGrid(box, q, onPick, curId, opts) {
+    var multi = !!(opts && opts.multi);
     var query = String(q || '').trim().toLowerCase();
     var cur = curId !== undefined ? curId : R && R.g ? R.g.id : '';
     var any = false;
@@ -846,31 +943,56 @@
       var grid = el('div', 'grid');
       box.appendChild(el('h4', '', sec[0]));
       list.forEach(function (g) {
-        var b = el('button', 'sg' + (g.id === cur ? ' cur' : ''));
+        var on = multi ? pickerSel.indexOf(g.id) >= 0 : g.id === cur;
+        var b = el('button', 'sg' + (multi ? (on ? ' on' : '') : (on ? ' cur' : '')));
         var av = el('span', 'av');
         b.type = 'button';
         b.setAttribute('data-gid', g.id);
+        if (multi) b.setAttribute('aria-pressed', String(on));
         av.setAttribute('aria-hidden', 'true');
         paintAv(av, g);
         b.appendChild(av);
+        if (multi) b.appendChild(checkBadge());
         b.appendChild(el('span', 'nm' + (/[^\s.,()]{11,}/.test(g.name) ? ' sm' : ''), g.name));
-        b.addEventListener('click', function () { onPick(g); });
+        b.addEventListener('click', function () {
+          if (multi) togglePick(g, b);
+          else onPick(g);
+        });
         grid.appendChild(b);
       });
       box.appendChild(grid);
     });
     if (!any) box.appendChild(el('p', 'none', t.none));
   }
-  function pickSolo(g) {
-    sSet(KEY_LAST, g.id);
-    playSolo(g);
+  function renderPickerFoot() {
+    var bs = $('pkCounts').querySelectorAll('button[data-n]');
+    for (var i = 0; i < bs.length; i++) {
+      var n = Number(bs[i].getAttribute('data-n'));
+      bs[i].setAttribute('aria-checked', String(n === pickerN));
+    }
+    var k = pickerSel.length;
+    var go = $('pkGo');
+    go.disabled = k === 0;
+    setText(go, k > 0 ? t.start + ' (' + k + ')' : t.start);
   }
-  function openPicker(onPick, curId) {
+  function pickSolo(g, n) {
+    var count = n != null ? validCount(n) : roundN;
+    nTouched = true;
+    roundN = count;
+    sSet(KEY_LAST, g.id);
+    sSet(KEY_N, count);
+    playSolo(g, count);
+  }
+  function openPicker(onPick, curId, curN) {
     pickCb = typeof onPick === 'function' ? onPick : pickSolo;
-    pickerCur = curId !== undefined ? curId : undefined;
+    var initId = curId !== undefined ? curId : (R && R.g ? R.g.id : '');
+    var initG = initId ? groupById(initId) : null;
+    pickerSel = initG ? sourceGids(initG).slice(0, 20) : [];
+    pickerN = validCount(curN !== undefined ? curN : roundN);
     pickerOpen = true;
     $('pkQ').value = '';
-    renderGrid($('pkList'), '', pickFromSheet, pickerCur);
+    renderGrid($('pkList'), '', null, null, { multi: true });
+    renderPickerFoot();
     $('pkList').scrollTop = 0;
     $('picker').hidden = false;
     syncClock();
@@ -882,6 +1004,15 @@
     $('picker').hidden = true;
     syncClock();
     if (!skipMusic && wantUrl && !muted && shouldPlay()) musicResume();
+  }
+  function confirmPicker() {
+    if (!pickerSel.length) return;
+    var g = groupById(pickerSel.join('+'));
+    if (!g) return;
+    var n = pickerN;
+    var cb = pickCb;
+    closePicker(true);
+    call(cb, g, n);
   }
   function openBoard() {
     if (boardOpen || !boardEl) return;
@@ -897,11 +1028,6 @@
     $('boardDlg').hidden = true;
     boardNext.parentNode.insertBefore(boardEl, boardNext);
     syncClock();
-  }
-  function pickFromSheet(g) {
-    var cb = pickCb;
-    closePicker(true);
-    call(cb, g);
   }
 
   function applyHost() {
@@ -921,10 +1047,13 @@
     els = doc.querySelectorAll('[data-ta]');
     for (i = 0; i < els.length; i++) els[i].setAttribute('aria-label', t[els[i].getAttribute('data-ta')]);
     if (R) renderHud();
-    if (pickerOpen) renderGrid($('pkList'), $('pkQ').value, pickFromSheet, pickerCur);
+    if (pickerOpen) {
+      renderGrid($('pkList'), $('pkQ').value, null, null, { multi: true });
+      renderPickerFoot();
+    }
     if (scr === 'end' && endRes) {
       renderEnd();
-      renderGrid($('endPk'), $('endQ').value, pickSolo);
+      renderGrid($('endPk'), $('endQ').value, function (g) { pickSolo(g, roundN); });
       loadBoard();
     }
   }
@@ -939,9 +1068,19 @@
     $('boardX').addEventListener('click', closeBoard);
     $('boardDlg').addEventListener('click', function (e) { if (e.target === $('boardDlg')) closeBoard(); });
     $('picker').addEventListener('click', function (e) { if (e.target === $('picker')) closePicker(); });
-    $('pkQ').addEventListener('input', function () { renderGrid($('pkList'), $('pkQ').value, pickFromSheet, pickerCur); });
-    $('endQ').addEventListener('input', function () { renderGrid($('endPk'), $('endQ').value, pickSolo); });
-    $('again').addEventListener('click', function () { if (endRes && BY_ID[endRes.gid]) playSolo(BY_ID[endRes.gid]); });
+    $('pkQ').addEventListener('input', function () { renderGrid($('pkList'), $('pkQ').value, null, null, { multi: true }); });
+    $('pkCounts').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-n]');
+      if (!b) return;
+      pickerN = validCount(Number(b.getAttribute('data-n')));
+      renderPickerFoot();
+    });
+    $('pkGo').addEventListener('click', confirmPicker);
+    $('endQ').addEventListener('input', function () { renderGrid($('endPk'), $('endQ').value, function (g) { pickSolo(g, roundN); }); });
+    $('again').addEventListener('click', function () {
+      var g = endRes && groupById(endRes.gid);
+      if (g) playSolo(g, roundN);
+    });
     $('retry').addEventListener('click', function () { submitScore(current); });
     $('tabF').addEventListener('click', function () { showTab('friends'); });
     $('tabG').addEventListener('click', function () { showTab('global'); });
@@ -960,6 +1099,7 @@
     started = true;
     bind();
     loadMute();
+    loadCount();
     applyHost();
     renderHud();
     if (C && GROUPS.length) {
@@ -987,6 +1127,7 @@
     if (!started) { launch(cfg); return; }
     seenP = {};
     loadMute();
+    loadCount();
     if (current && !current.saved && current.uid !== userId) {
       current = null;
       renderSave();
@@ -1029,11 +1170,11 @@
     openPicker: openPicker,
     closePicker: closePicker,
     t: function (k) { return t[k] != null ? t[k] : TXT.mn[k] != null ? TXT.mn[k] : k; },
-    groupById: function (id) { return BY_ID[id] || null; },
+    groupById: groupById,
     groups: function () { return SORTED.slice(); },
     screen: screen,
     state: function () {
-      return { screen: scr, groupId: R ? R.g.id : null, q: R ? R.i : -1, lives: R ? R.lives : C.LIVES, score: R ? R.score : 0 };
+      return { screen: scr, groupId: R ? R.g.id : null, q: R ? R.i : -1, lives: R ? R.lives : C.LIVES, score: R ? R.score : 0, total: R ? R.qs.length : 0, n: roundN };
     },
     current: function () { return R && R.i >= 0 && R.i < R.qs.length ? R.qs[R.i] : null; },
     music: function () {

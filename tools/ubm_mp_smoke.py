@@ -29,7 +29,7 @@ EXPECT_Q = """q => {
   const s = __stub.log().find(a => a.action_type === 'start').action_data;
   const g = UBM.groupById(s.gid);
   const r = UBMCore.rng(s.seed);
-  return UBMCore.round(g, UBMCore.pickRefs(g, [], 10, r), r)[q].id;
+  return UBMCore.round(g, UBMCore.pickRefs(g, [], s.n || 10, r), r)[q].id;
 }"""
 
 SLOW_START = """() => {
@@ -134,12 +134,14 @@ def main_match(b):
 
     p1.click('#hallSinger')
     assert p1.is_visible('#picker')
-    assert p1.evaluate("document.querySelector('#pkList .sg.cur').dataset.gid") == DEFAULT
+    assert p1.evaluate("document.querySelector('#pkList .sg.on').dataset.gid") == DEFAULT
+    p1.click('#pkList .sg[data-gid="%s"]' % DEFAULT)
     p1.click('#pkList .sg[data-gid="%s"]' % PICK)
+    p1.click('#pkGo')
     assert p1.is_hidden('#picker') and p1.text_content('#hallSN') == 'Харанга'
     p2.wait_for_function("document.getElementById('hallSN').textContent === 'Харанга'", timeout=5000)
     p1.click('#hallSinger')
-    assert p1.evaluate("document.querySelector('#pkList .sg.cur').dataset.gid") == PICK
+    assert p1.evaluate("document.querySelector('#pkList .sg.on').dataset.gid") == PICK
     p1.click('#pkX')
 
     ready_both(p1, p2)
@@ -363,6 +365,58 @@ def promoted(b):
     ctx.close()
 
 
+def mix_match(b):
+    ctx = b.new_context(viewport=VIEW, device_scale_factor=2)
+    ctx.add_init_script(STUB)
+    p1, e1 = open_page(ctx, '?mode=multiplayer&uid=u1&room=r4')
+    wait_screen(p1, 'hall')
+    p2, e2 = open_page(ctx, '?mode=multiplayer&uid=u2&room=r4')
+    wait_screen(p2, 'hall')
+    wait_rows(p1, 2)
+    wait_rows(p2, 2)
+
+    mix_id = '+'.join(sorted([DEFAULT, PICK]))
+    p1.click('#hallSinger')
+    assert p1.is_visible('#picker')
+    p1.click('#pkList .sg[data-gid="%s"]' % PICK)
+    p1.click('#pkCounts button[data-n="5"]')
+    p1.click('#pkGo')
+    assert p1.is_hidden('#picker')
+    assert p1.text_content('#hallSN') == 'Хурд +1'
+    assert '2 дуучин' in p1.text_content('#hallSS') and '5 мөр' in p1.text_content('#hallSS')
+    p2.wait_for_function("document.getElementById('hallSN').textContent === 'Хурд +1'", timeout=5000)
+    assert '2 дуучин' in p2.text_content('#hallSS') and '5 мөр' in p2.text_content('#hallSS')
+
+    ready_both(p1, p2)
+    p1.click('#startBtn')
+    for pg in (p1, p2):
+        pg.wait_for_function("UBM.state().screen === 'round' && !!UBM.current()", timeout=5000)
+        s = st(pg)
+        assert s['groupId'] == mix_id and s['total'] == 5, s
+        assert pg.text_content('#qn') == '1/5'
+
+    p1_ids = []
+    for _ in range(5):
+        p1_ids.append(p1.evaluate('UBM.current().id'))
+        answer_line(p1)
+    p2_ids = []
+    for _ in range(5):
+        p2_ids.append(p2.evaluate('UBM.current().id'))
+        answer_line(p2)
+    assert len(p1_ids) == 5 and p1_ids == p2_ids, (p1_ids, p2_ids)
+    for pg in (p1, p2):
+        wait_screen(pg, 'results')
+        pg.wait_for_selector('#resAgain:not([hidden])', timeout=5000)
+        assert pg.text_content('#resSinger') == 'Хурд +1'
+        assert pg.text_content('#resList .rr[data-pid="u1"] .sc small') == '5/5'
+        assert pg.text_content('#resList .rr[data-pid="u2"] .sc small') == '5/5'
+    p1.wait_for_function('__stub.calls.submit.length === 1', timeout=5000)
+    sub = p1.evaluate('__stub.calls.submit[0]')
+    assert sub['meta']['singer'] == mix_id and sub['meta']['n'] == 5, sub
+    assert not (e1 or e2), (e1, e2)
+    ctx.close()
+
+
 httpd = serve()
 BASE = 'http://127.0.0.1:%d' % httpd.server_address[1]
 with sync_playwright() as p:
@@ -370,6 +424,7 @@ with sync_playwright() as p:
     main_match(browser)
     rematch(browser)
     promoted(browser)
+    mix_match(browser)
     browser.close()
 httpd.shutdown()
 print('UBM MP SMOKE OK', OUT)

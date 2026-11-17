@@ -2,6 +2,7 @@
   "use strict";
 
   var SCHEDULE = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5];
+  var COUNTS = [5, 10, 20, 30];
   var ROUND = 10;
   var LIVES = 3;
   var SPEED_MS = 15000;
@@ -52,6 +53,22 @@
     return a;
   }
 
+  function interleave(buckets, group, rnd) {
+    var by = {};
+    var keys = [];
+    buckets.forEach(function (b) {
+      var k = group.songs[b[0].s].gid;
+      if (!by[k]) { by[k] = []; keys.push(k); }
+      by[k].push(b);
+    });
+    keys = shuffle(keys, rnd);
+    var out = [];
+    for (var i = 0; out.length < buckets.length; i++) {
+      keys.forEach(function (k) { if (by[k][i]) out.push(by[k][i]); });
+    }
+    return out;
+  }
+
   function pickRefs(group, seen, n, rnd) {
     var count = n === undefined ? ROUND : n;
     var seenList = seen || [];
@@ -75,6 +92,7 @@
     var firstPass = [];
     var restUnseen = [];
     var shuffledBuckets = shuffle(songBuckets, rnd);
+    if (group.mix) shuffledBuckets = interleave(shuffledBuckets, group, rnd);
     for (var i = 0; i < shuffledBuckets.length; i++) {
       var b = shuffledBuckets[i];
       firstPass.push(b[0]);
@@ -180,11 +198,42 @@
     var tiles = shuffle(answer.concat(decoys), rnd);
     return {
       id: ex[0],
+      gid: song.gid || group.id,
       song: song.t,
       prev: ex[1],
       shown: shown,
       answer: answer,
       tiles: tiles
+    };
+  }
+
+  function mix(groups) {
+    if (!Array.isArray(groups) || !groups.length) return null;
+    var sorted = groups.slice().sort(function (a, b) {
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    if (sorted.length === 1) return sorted[0];
+    var ids = [];
+    var songs = [];
+    for (var i = 0; i < sorted.length; i++) {
+      var g = sorted[i];
+      ids.push(g.id);
+      var gs = g.songs || [];
+      for (var j = 0; j < gs.length; j++) {
+        var s = gs[j];
+        var copy = {};
+        for (var k in s) {
+          if (Object.prototype.hasOwnProperty.call(s, k)) copy[k] = s[k];
+        }
+        copy.gid = g.id;
+        songs.push(copy);
+      }
+    }
+    return {
+      id: ids.join("+"),
+      name: (sorted[0].name.length > 14 ? sorted[0].name.slice(0, 13) + "…" : sorted[0].name) + " +" + (sorted.length - 1),
+      mix: ids,
+      songs: songs
     };
   }
 
@@ -206,9 +255,10 @@
     return 100 + Math.round(50 * Math.max(0, 1 - t / SPEED_MS));
   }
 
-  function standings(roster, acts) {
+  function standings(roster, acts, total) {
     var list = roster || [];
     var entries = acts || [];
+    var n = total > 0 ? total | 0 : ROUND;
     var rowsById = new Map();
     var orderById = new Map();
     var rows = [];
@@ -233,7 +283,7 @@
       var row = rowsById.get(act.player_id);
       if (!row) continue;
       var q = act.q | 0;
-      if (q < 0 || q >= ROUND) continue;
+      if (q < 0 || q >= n) continue;
       var key = act.player_id + "\0" + q;
       if (seenActs.has(key)) continue;
       seenActs.add(key);
@@ -247,7 +297,7 @@
       row.lives = Math.min(row.lives, lives);
     }
     for (var i = 0; i < rows.length; i++) {
-      rows[i].done = rows[i].answered >= ROUND || rows[i].lives <= 0;
+      rows[i].done = rows[i].answered >= n || rows[i].lives <= 0;
     }
     rows.sort(function (a, b) {
       if (b.score !== a.score) return b.score - a.score;
@@ -259,6 +309,7 @@
 
   var UBMCore = {
     SCHEDULE: SCHEDULE,
+    COUNTS: COUNTS,
     ROUND: ROUND,
     LIVES: LIVES,
     SPEED_MS: SPEED_MS,
@@ -270,6 +321,7 @@
     pickRefs: pickRefs,
     question: question,
     round: round,
+    mix: mix,
     tileOk: tileOk,
     lineScore: lineScore,
     standings: standings
