@@ -8,7 +8,7 @@
       global: 'Дэлхий', next: 'Дараагийн дуучин', perfect: 'Төгс!', done: 'Дууслаа', out: 'Амь дууслаа',
       saving: 'Хадгалж байна…', saved: 'Хадгалагдлаа', failed: 'Хадгалагдаагүй', guest: 'Нэвтэрч байж хадгална',
       retry: 'Дахин илгээх', loading: 'Ачаалж байна…', empty: 'Одоохондоо хоосон', error: 'Ачаалж чадсангүй',
-      me: 'Би', mute: 'Дуу хаах'
+      me: 'Би', mute: 'Дуу хаах', board: 'Тэргүүлэгчид'
     },
     en: {
       lives: 'Lives', score: 'Score', lines: 'lines', pick: 'Pick a singer', search: 'Search', packs: 'Packs',
@@ -16,7 +16,7 @@
       global: 'Global', next: 'Next singer', perfect: 'Perfect!', done: 'Finished', out: 'Out of lives',
       saving: 'Saving…', saved: 'Saved', failed: 'Not saved', guest: 'Sign in to save',
       retry: 'Retry', loading: 'Loading…', empty: 'No records yet', error: 'Could not load',
-      me: 'Me', mute: 'Mute'
+      me: 'Me', mute: 'Mute', board: 'Leaderboard'
     }
   };
   var KEY_LAST = 'ubm:last';
@@ -49,6 +49,9 @@
   var soloSeq = 0;
   var seenP = {};
   var pickerOpen = false;
+  var boardOpen = false;
+  var boardEl = null;
+  var boardNext = null;
   var pickCb = null;
   var endRes = null;
   var current = null;
@@ -447,6 +450,7 @@
   }
 
   function screen(name) {
+    closeBoard();
     scr = name;
     var els = doc.querySelectorAll('[data-screen]');
     for (var i = 0; i < els.length; i++) els[i].hidden = els[i].getAttribute('data-screen') !== name;
@@ -465,7 +469,7 @@
 
   function syncClock() {
     if (!R || R.over) return;
-    var stop = (doc.hidden && R.mode !== 'race') || pickerOpen;
+    var stop = (doc.hidden && R.mode !== 'race') || pickerOpen || (boardOpen && R.mode !== 'race');
     if (stop && !R.pausedAt) R.pausedAt = clock();
     else if (!stop && R.pausedAt) {
       R.t0 += clock() - R.pausedAt;
@@ -879,6 +883,21 @@
     syncClock();
     if (!skipMusic && wantUrl && !muted && shouldPlay()) musicResume();
   }
+  function openBoard() {
+    if (boardOpen || !boardEl) return;
+    boardOpen = true;
+    $('boardBody').appendChild(boardEl);
+    $('boardDlg').hidden = false;
+    syncClock();
+    loadBoard();
+  }
+  function closeBoard() {
+    if (!boardOpen) return;
+    boardOpen = false;
+    $('boardDlg').hidden = true;
+    boardNext.parentNode.insertBefore(boardEl, boardNext);
+    syncClock();
+  }
   function pickFromSheet(g) {
     var cb = pickCb;
     closePicker(true);
@@ -914,6 +933,11 @@
     try { reduce = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) {}
     $('chip').addEventListener('click', function () { if (R && R.mode !== 'race') openPicker(); });
     $('pkX').addEventListener('click', function () { closePicker(); });
+    boardEl = doc.querySelector('.board');
+    boardNext = boardEl.nextSibling;
+    $('lbBtn').addEventListener('click', openBoard);
+    $('boardX').addEventListener('click', closeBoard);
+    $('boardDlg').addEventListener('click', function (e) { if (e.target === $('boardDlg')) closeBoard(); });
     $('picker').addEventListener('click', function (e) { if (e.target === $('picker')) closePicker(); });
     $('pkQ').addEventListener('input', function () { renderGrid($('pkList'), $('pkQ').value, pickFromSheet, pickerCur); });
     $('endQ').addEventListener('input', function () { renderGrid($('endPk'), $('endQ').value, pickSolo); });
@@ -927,7 +951,7 @@
     doc.addEventListener('touchend', onUnlock, { capture: true, passive: true });
     doc.addEventListener('click', onUnlock, { capture: true, passive: true });
     doc.addEventListener('touchstart', noop, { passive: true });
-    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePicker(); });
+    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closePicker(); closeBoard(); } });
     doc.addEventListener('contextmenu', function (e) { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });
   }
 
