@@ -351,7 +351,7 @@
     var seq = seqOf(a);
     var d = a.action_data || {};
     if (a.action_type === 'start') {
-      if (typeof d.m !== 'string' || matches[d.m] || !UBM.groupById(d.gid) || !Array.isArray(d.roster)) return false;
+      if (a.player_id !== hostId || typeof d.m !== 'string' || matches[d.m] || !UBM.groupById(d.gid) || !Array.isArray(d.roster)) return false;
       var roster = d.roster.filter(function (id, i) { return typeof id === 'string' && d.roster.indexOf(id) === i; }).slice(0, MAX);
       var M = matches[d.m] = { m: d.m, seed: d.seed >>> 0, gid: d.gid, roster: roster, acts: [], at: now(), seq: seq, ended: false, upto: 0 };
       if (!latest || seq >= latest.seq) latest = M;
