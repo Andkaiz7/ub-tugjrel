@@ -112,6 +112,15 @@ def main_flow(b):
     assert s['q'] == 0 and s['lives'] == 3 and s['score'] == 0, s
     assert pg.text_content('#chipName').strip(), 'header shows a singer name'
     assert pg.text_content('#chipName') == pg.evaluate('UBM.groupById(UBM.state().groupId).name')
+    pg.click('#lbBtn')
+    assert pg.is_visible('#boardDlg') and pg.text_content('#boardT') == 'Тэргүүлэгчид'
+    pg.wait_for_function("document.querySelector('#boardDlg #lb').textContent.indexOf('Бат') >= 0", timeout=5000)
+    pg.wait_for_timeout(500)
+    assert pg.evaluate("document.elementFromPoint(195, 760).closest('#boardDlg') !== null")
+    pg.screenshot(path=str(OUT / 'board-sheet.png'))
+    pg.click('#boardX')
+    assert pg.is_hidden('#boardDlg')
+    assert pg.evaluate("!!document.querySelector('#end .board #lb')")
     assert pg.text_content('#qn') == '1/10', pg.text_content('#qn')
     tile = pg.query_selector('#tray .tile')
     assert pg.evaluate("e => getComputedStyle(e).userSelect", tile) == 'none'
