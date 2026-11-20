@@ -24,6 +24,8 @@
   var KEY_PEND = 'ubm:pend';
   var KEY_MUTE = 'ubm:mute';
   var BGM_VOL = 0.3;
+  var SFX_OK_VOL = 0.28;
+  var SFX_BAD_VOL = 0.1;
   var NEXT_MS = 900;
   var AV = [
     ['#ff7eb3', '#d6246e'], ['#ffad5c', '#e2540f'], ['#ffd86b', '#e08a00'], ['#5fd4f4', '#1767c9'],
@@ -71,6 +73,7 @@
   var waiting = false;
   var bgm = null;
   var actx = null;
+  var sctx = null;
   var gainNode = null;
   var muted = false;
   var muteTouched = false;
@@ -533,6 +536,35 @@
       setGain(BGM_VOL, 400);
     }
   }
+  function sfx(ok) {
+    if (muted) return;
+    ensureAudio();
+    var AC = root.AudioContext || root.webkitAudioContext;
+    if (!actx && !sctx && AC) {
+      try { sctx = new AC(); } catch (e) { sctx = null; }
+    }
+    var ctx = actx || sctx;
+    if (!ctx || ctx.state === 'closed') return;
+    if (ctx.state !== 'running') attempt(function () { return ctx.resume(); }).catch(noop);
+    var now = ctx.currentTime;
+    var notes = ok ? [[880, 0, 0.12], [1318.5, 0.08, 0.22]] : [[196, 0, 0.16], [146.8, 0.13, 0.26]];
+    notes.forEach(function (n) {
+      try {
+        var o = ctx.createOscillator();
+        var gn = ctx.createGain();
+        var t0 = now + n[1];
+        o.type = ok ? 'triangle' : 'square';
+        o.frequency.setValueAtTime(n[0], t0);
+        gn.gain.setValueAtTime(0.0001, t0);
+        gn.gain.exponentialRampToValueAtTime(ok ? SFX_OK_VOL : SFX_BAD_VOL, t0 + 0.012);
+        gn.gain.exponentialRampToValueAtTime(0.0001, t0 + n[2]);
+        o.connect(gn);
+        gn.connect(ctx.destination);
+        o.start(t0);
+        o.stop(t0 + n[2] + 0.02);
+      } catch (e) {}
+    });
+  }
   function toggleMute() {
     muteTouched = true;
     applyMute(!muted);
@@ -699,11 +731,13 @@
       ss[R.filled].textContent = Q.answer[R.filled];
       ss[R.filled].className = 'slot on';
       R.filled++;
+      sfx(true);
       if (R.filled < ss.length) ss[R.filled].className = 'slot cur';
       else lineDone();
       return;
     }
     if (b.classList.contains('bad')) return;
+    sfx(false);
     R.lives = Math.max(0, R.lives - 1);
     replay(b, 'bad');
     clearTimeout(b._bad);

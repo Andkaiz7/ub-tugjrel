@@ -722,6 +722,37 @@ def skip_flow(b):
     pg.context.close()
 
 
+OSC_SPY = """(() => {
+  window.__osc = [];
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const make = AC.prototype.createOscillator;
+  AC.prototype.createOscillator = function () {
+    const o = make.call(this);
+    const set = o.frequency.setValueAtTime.bind(o.frequency);
+    o.frequency.setValueAtTime = (v, t) => { window.__osc.push(Math.round(v)); return set(v, t); };
+    return o;
+  };
+})();"""
+
+
+def sfx_flow(b):
+    pg, errors = new_page(b, {'width': 390, 'height': 844}, True, extra=OSC_SPY)
+    wait_round(pg)
+    wrong_tap(pg)
+    assert pg.evaluate('__osc') == [196, 147], pg.evaluate('__osc')
+    pg.evaluate('__osc.length = 0')
+    pg.click('#muteBtn')
+    wrong_tap(pg)
+    assert st(pg)['lives'] == 1
+    assert pg.evaluate('__osc') == [], 'muted: no sfx'
+    pg.click('#muteBtn')
+    w = pg.evaluate('UBM.current().answer[0]')
+    tap(pg, pg.evaluate(TILE_FOR, w))
+    assert pg.evaluate('__osc') == [880, 1319], pg.evaluate('__osc')
+    assert not errors, errors
+    pg.context.close()
+
+
 def multi_flow(b):
     js, _, _ = media_fixture(START_GID, all_pre=True)
     pg, errors = new_page(b, {'width': 390, 'height': 844}, True, setup=media_setup(js))
@@ -811,6 +842,7 @@ with sync_playwright() as p:
     main_flow(browser)
     media_flow(browser)
     skip_flow(browser)
+    sfx_flow(browser)
     multi_flow(browser)
     shots(browser, {'width': 360, 'height': 640}, 'small')
     shots(browser, {'width': 390, 'height': 844}, 'en', '?lang=en')
