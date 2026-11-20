@@ -12,7 +12,11 @@
   var uid = param('uid', 'u_test');
   var mode = param('mode', 'single');
   var room = mode === 'multiplayer' ? param('room', 'r1') : '';
-  var calls = { submit: [], profile: [], invite: 0, report: [], sync: 0, actions: [] };
+  var calls = { submit: [], profile: [], invite: 0, report: [], sync: 0, actions: [], cloud: [] };
+  var fcloud = {};
+  var scloud = {
+    'top:10': [{ u: 'u9', n: 'Top', s: 1500 }, { u: 'u8', n: 'Номин', s: 1462 }]
+  };
   var failFirst = true;
   var H = {};
   var held = {};
@@ -107,6 +111,8 @@
   window.__stub = {
     calls: calls,
     store: store,
+    fcloud: fcloud,
+    scloud: scloud,
     assignRoom: function (r) {
       room = r;
       fire('roomAssigned', { roomId: r });
@@ -136,6 +142,37 @@
       get: function (k) { return Promise.resolve(k in store ? JSON.parse(JSON.stringify(store[k])) : null); },
       set: function (k, v) { store[k] = JSON.parse(JSON.stringify(v)); persist(); return Promise.resolve(true); },
       remove: function (k) { delete store[k]; persist(); return Promise.resolve(true); }
+    },
+    cloud: {
+      friends: {
+        get: function (k) {
+          calls.cloud.push({ op: 'friends.get', key: k });
+          return Promise.resolve(k in fcloud ? JSON.parse(JSON.stringify(fcloud[k])) : null);
+        },
+        set: function (k, v) {
+          calls.cloud.push({ op: 'friends.set', key: k, value: v });
+          fcloud[k] = v == null ? null : JSON.parse(JSON.stringify(v));
+          return Promise.resolve(true);
+        },
+        list: function (k) {
+          calls.cloud.push({ op: 'friends.list', key: k });
+          return Promise.resolve(/^best:\d+$/.test(k) ? [
+            { userId: 'u2', name: 'Бат', avatar: '', value: { s: 1320 }, updatedAt: 0 },
+            { userId: 'u3', name: 'Сараа', avatar: '', value: { s: 640 }, updatedAt: 0 }
+          ] : []);
+        }
+      },
+      shared: {
+        get: function (k) {
+          calls.cloud.push({ op: 'shared.get', key: k });
+          return Promise.resolve(k in scloud ? JSON.parse(JSON.stringify(scloud[k])) : null);
+        },
+        set: function (k, v) {
+          calls.cloud.push({ op: 'shared.set', key: k, value: v });
+          scloud[k] = v == null ? null : JSON.parse(JSON.stringify(v));
+          return Promise.resolve(true);
+        }
+      }
     },
     leaderboard: {
       submit: function (score, meta) {
