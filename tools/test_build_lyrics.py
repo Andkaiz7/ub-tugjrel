@@ -102,6 +102,11 @@ class TestBuildLyrics(unittest.TestCase):
         self.assertTrue(build_lyrics.blocked("big dick"))
         self.assertFalse(build_lyrics.blocked("новш минь"))
         self.assertFalse(build_lyrics.blocked("Хайртай шүү"))
+        self.assertTrue(build_lyrics.blocked("shake your ass"))
+        self.assertTrue(build_lyrics.blocked("Hoes and tits"))
+        self.assertTrue(build_lyrics.blocked("my nigga"))
+        self.assertFalse(build_lyrics.blocked("assume the position"))
+        self.assertFalse(build_lyrics.blocked("a classic hoedown"))
         self.assertFalse(build_lyrics.blocked("seaweed soup"))
         self.assertFalse(build_lyrics.blocked("хуй салхи"))
         self.assertFalse(build_lyrics.blocked("уурганы хуйв"))
@@ -164,6 +169,22 @@ class TestBuildLyrics(unittest.TestCase):
                     f"Есөн хоёр {lbl} зорилтот мөр",
                 ])
             songs.append(make_song("ЕсөнЭшлэл", f"Дуу {lbl}", lines, views=300))
+        for lbl in labels[:2]:
+            songs.append(
+                make_song(
+                    "ХоёрХөн",
+                    f"Дуу {lbl}",
+                    [
+                        f"Өмнөх эхний мөр {lbl}",
+                        f"Зорилтот эхний {lbl} дөрвөн үгтэй",
+                        f"Өмнөх хоёр дахь {lbl}",
+                        f"Зорилтот хоёр {lbl} дөрвөн үгтэй",
+                        f"Өмнөх гурав дахь {lbl}",
+                        f"Зорилтот гурав {lbl} дөрвөн үгтэй",
+                    ],
+                    views=9000,
+                )
+            )
         songs.append(
             make_song(
                 "ТаванДуу",
@@ -192,16 +213,16 @@ class TestBuildLyrics(unittest.TestCase):
         self.assertEqual(data["v"], "abc123")
         self.assertEqual(len(dropped), 1)
         names = [g["name"] for g in data["groups"]]
-        self.assertNotIn("ДөрөвХөн", names)
+        self.assertNotIn("ХоёрХөн", names)
         self.assertNotIn("ЕсөнЭшлэл", names)
-        self.assertEqual(names, ["Хүүхдийн Дуу", "ТаванДуу"])
+        self.assertEqual(names, ["ДөрөвХөн", "Хүүхдийн Дуу", "ТаванДуу"])
 
-        pack_group = data["groups"][0]
+        pack_group = data["groups"][1]
         self.assertTrue(pack_group["pack"])
         self.assertEqual(pack_group["views"], 1000)
         self.assertEqual(pack_group["id"], hashlib.sha1("Хүүхдийн Дуу".encode("utf-8")).hexdigest()[:8])
 
-        artist_group = data["groups"][1]
+        artist_group = data["groups"][2]
         self.assertFalse(artist_group["pack"])
         self.assertEqual(artist_group["id"], hashlib.sha1("ТаванДуу".encode("utf-8")).hexdigest()[:8])
         first_excerpt = artist_group["songs"][0]["x"][0]
