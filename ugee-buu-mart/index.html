@@ -167,7 +167,8 @@ button.row:active{transform:scale(.98)}
 #pkList{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 0 12px}
 #pkFoot{flex:none;display:flex;flex-direction:column;gap:10px;padding:10px 0 calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
 .pkRow{display:flex;align-items:center;justify-content:space-between;gap:10px}
-#pkCountLbl{font-weight:800;font-size:13px;color:var(--mut);white-space:nowrap}
+#pkCountLbl,.lbLbl{font-weight:800;font-size:13px;color:var(--mut);white-space:nowrap}
+.lbRow{padding:2px 4px 8px}
 .seg{flex:1;max-width:260px;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px;border-radius:14px;background:rgba(0,0,0,.32)}
 .seg button{min-height:44px;border-radius:11px;font-weight:900;font-size:15px;color:var(--mut);font-variant-numeric:tabular-nums;transition:transform .1s ease-out,background .15s,color .15s}
 .seg button[aria-checked="true"]{background:var(--g2);color:var(--gT);box-shadow:0 2px 8px rgba(255,210,87,.35)}
@@ -290,6 +291,15 @@ button.pl:active{transform:scale(.98)}
       <button id="again" class="big" type="button" data-t="again"></button>
       <button id="endHall" class="btn2" type="button" data-t="hallBack" hidden></button>
       <div class="board">
+        <div class="pkRow lbRow">
+          <span class="lbLbl" data-t="count"></span>
+          <div id="lbCounts" class="seg" role="radiogroup" data-ta="count">
+            <button type="button" role="radio" aria-checked="false" data-n="5">5</button>
+            <button type="button" role="radio" aria-checked="false" data-n="10">10</button>
+            <button type="button" role="radio" aria-checked="false" data-n="20">20</button>
+            <button type="button" role="radio" aria-checked="false" data-n="30">30</button>
+          </div>
+        </div>
         <div class="tabs" role="tablist"><button id="tabF" type="button" role="tab" data-t="friends" aria-selected="true"></button><button id="tabG" type="button" role="tab" data-t="global" aria-selected="false"></button></div>
         <div id="lb"></div>
       </div>

@@ -186,10 +186,17 @@ def main_flow(b):
     assert pg.evaluate("__stub.store['ubm:pend'].score") == score
     pg.click('#retry')
     pg.wait_for_function("document.getElementById('saveText').textContent.indexOf('Хадгалагдлаа') === 0", timeout=5000)
+    assert pg.text_content('#saveText') == 'Хадгалагдлаа', pg.text_content('#saveText')
     assert pg.is_hidden('#retry')
     sub = pg.evaluate('__stub.calls.submit')
     assert len(sub) == 2 and sub[1]['score'] == score and sub[1]['meta']['lines'] == 2, sub
     pg.wait_for_function("!__stub.store['ubm:pend']", timeout=3000)
+
+    pg.wait_for_function("s => __stub.fcloud['best:10'] && __stub.fcloud['best:10'].s === s", arg=score, timeout=5000)
+    assert pg.evaluate("__stub.fcloud['best:10'].s") == score
+    top10 = pg.evaluate("__stub.scloud['top:10']")
+    assert any(e.get('u') == 'u_test' and e.get('s') == score for e in top10), top10
+    assert pg.get_attribute('#lbCounts button[data-n="10"]', 'aria-checked') == 'true'
 
     pg.wait_for_function("document.querySelectorAll('#lb button.row').length === 2 && document.querySelectorAll('#lb div.row.me').length === 1", timeout=5000)
     pg.click('#lb button.row >> nth=0')
@@ -197,6 +204,12 @@ def main_flow(b):
     pg.click('#tabG')
     pg.wait_for_function("document.getElementById('lb').textContent.indexOf('Top') >= 0", timeout=5000)
     assert pg.get_attribute('#tabG', 'aria-selected') == 'true'
+    pg.click('#lbCounts button[data-n="5"]')
+    assert pg.get_attribute('#lbCounts button[data-n="5"]', 'aria-checked') == 'true'
+    pg.wait_for_function("document.getElementById('lb').textContent.indexOf('Одоохондоо хоосон') >= 0", timeout=5000)
+    pg.click('#lbCounts button[data-n="10"]')
+    assert pg.get_attribute('#lbCounts button[data-n="10"]', 'aria-checked') == 'true'
+    pg.wait_for_function("document.getElementById('lb').textContent.indexOf('Top') >= 0", timeout=5000)
     pg.click('#tabF')
     pg.wait_for_function("document.getElementById('lb').textContent.indexOf('Бат') >= 0", timeout=5000)
     pg.wait_for_timeout(400)

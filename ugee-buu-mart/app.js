@@ -62,6 +62,7 @@
   var roundN = C ? C.ROUND : 10;
   var nTouched = false;
   var tab = 'friends';
+  var lbN = 0;
   var boardSeq = 0;
   var flushing = false;
   var countSeq = 0;
@@ -114,6 +115,55 @@
     var u = usion();
     var l = hostReady && u && u.leaderboard;
     return l && typeof l[m] === 'function' ? l : null;
+  }
+  function cloudFriends(forList) {
+    var u = usion();
+    var f = hostReady && u && u.cloud && u.cloud.friends;
+    if (!f || typeof f.get !== 'function') return null;
+    return forList ? (typeof f.list === 'function' ? f : null) : (typeof f.set === 'function' ? f : null);
+  }
+  function cloudShared(forSet) {
+    var u = usion();
+    var s = hostReady && u && u.cloud && u.cloud.shared;
+    if (!s || typeof s.get !== 'function') return null;
+    return forSet ? (typeof s.set === 'function' ? s : null) : s;
+  }
+  function cleanStr(v, max) {
+    return typeof v === 'string' ? v.trim().slice(0, max) : '';
+  }
+  function cleanAv(v) {
+    return typeof v === 'string' && /^https?:\/\//i.test(v) && v.length <= 500 ? v : '';
+  }
+  function cleanScore(v) {
+    return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v > 0 && v <= 100000 ? v : 0;
+  }
+  function myProfile() {
+    var u = usion();
+    var usr = u && u.user;
+    var name = '';
+    var av = '';
+    try { if (usr && typeof usr.getName === 'function') name = cleanStr(usr.getName(), 40); } catch (e) {}
+    try { if (usr && typeof usr.getAvatar === 'function') av = cleanAv(usr.getAvatar()); } catch (e) {}
+    return { name: name, avatar: av };
+  }
+  function sanitiseTop(raw) {
+    if (!Array.isArray(raw)) return [];
+    var byU = Object.create(null);
+    for (var i = 0; i < raw.length; i++) {
+      var e = raw[i];
+      if (!e || typeof e !== 'object') continue;
+      var u = typeof e.u === 'string' ? e.u.trim() : '';
+      var s = cleanScore(e.s);
+      if (!u || !s) continue;
+      var item = { u: u, n: cleanStr(e.n, 40), a: cleanAv(e.a), s: s };
+      if (!byU[u] || s > byU[u].s) byU[u] = item;
+    }
+    var out = Object.keys(byU).map(function (k) { return byU[k]; });
+    out.sort(function (a, b) { return b.s - a.s; });
+    return out.slice(0, 30);
+  }
+  function boardN() {
+    return lbN || validCount(endRes ? endRes.n : R ? R.n : roundN);
   }
   function remote() {
     var u = usion();
@@ -710,6 +760,7 @@
   function showEnd(res) {
     if (!res) return;
     endRes = res;
+    lbN = validCount(res.n);
     screen('end');
     $('end').scrollTop = 0;
     $('endQ').value = '';
@@ -737,8 +788,7 @@
     renderSave();
   }
   function saveText(st, a) {
-    var txt = { saving: t.saving, saved: t.saved, failed: t.failed, guest: t.guest }[st] || '';
-    return st === 'saved' && a && a.rank ? txt + ' · #' + a.rank : txt;
+    return { saving: t.saving, saved: t.saved, failed: t.failed, guest: t.guest }[st] || '';
   }
   function renderSave() {
     var st = (current && current.saveState) || '';
@@ -791,7 +841,50 @@
     if (a) res.saveInfo = a;
     call(res.onSave, s, res.saveInfo || null);
   }
+  function recordBest(res) {
+    if (!res || res.rec || !(res.score > 0) || !userId || /^guest_/.test(userId)) return;
+    var score = Math.round(res.score);
+    if (!(score > 0 && score <= 100000)) return;
+    var cf = cloudFriends(false);
+    var cs = cloudShared(true);
+    if (!cf || !cs) return;
+    var n = validCount(res.n);
+    var fKey = 'best:' + n;
+    var sKey = 'top:' + n;
+    res.rec = true;
+    try {
+      var fP = timed(attempt(function () { return cf.get(fKey); }), 8000).then(function (v) {
+        var prev = v && typeof v === 'object' ? cleanScore(v.s) : 0;
+        if (prev >= score) return;
+        return timed(attempt(function () { return cf.set(fKey, { s: score }); }), 8000);
+      });
+      var sP = timed(attempt(function () { return cs.get(sKey); }), 8000).then(function (raw) {
+        var list = sanitiseTop(raw);
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].u === userId && list[i].s >= score) return;
+        }
+        var me = myProfile();
+        var next = list.filter(function (x) { return x.u !== userId; });
+        next.push({ u: userId, n: me.name, a: me.avatar, s: score });
+        next = sanitiseTop(next);
+        var inTop = false;
+        for (var j = 0; j < next.length; j++) {
+          if (next[j].u === userId) { inTop = true; break; }
+        }
+        if (!inTop) return;
+        return timed(attempt(function () { return cs.set(sKey, next); }), 8000);
+      });
+      Promise.all([fP, sP]).then(function () {
+        if (scr === 'end' && boardN() === n) loadBoard();
+      }, function () {
+        res.rec = false;
+      });
+    } catch (e) {
+      res.rec = false;
+    }
+  }
   function submitScore(res, onSave) {
+    recordBest(res);
     if (!res || !(res.score > 0)) return;
     if (typeof onSave === 'function') res.onSave = onSave;
     if (res.saved || res.busy) { call(res.onSave, res.saveState, res.saveInfo || null); return; }
@@ -875,22 +968,62 @@
   function loadBoard() {
     var seq = ++boardSeq;
     var which = tab;
+    var n = boardN();
     var box = $('lb');
     $('tabF').setAttribute('aria-selected', String(which === 'friends'));
     $('tabG').setAttribute('aria-selected', String(which === 'global'));
-    var l = lbApi(which === 'friends' ? 'friends' : 'top');
-    if (!l) { boardMsg(t.error, true); return; }
+    var bs = $('lbCounts').querySelectorAll('button[data-n]');
+    for (var i = 0; i < bs.length; i++) {
+      bs[i].setAttribute('aria-checked', String(Number(bs[i].getAttribute('data-n')) === n));
+    }
+    var cf = which === 'friends' ? cloudFriends(true) : null;
+    var cs = which === 'global' ? cloudShared(false) : null;
+    if (which === 'friends' ? !cf : !cs) { boardMsg(t.error, true); return; }
     boardMsg(t.loading);
+    if (which === 'friends') {
+      var key = 'best:' + n;
+      timed(attempt(function () {
+        return Promise.all([cf.list(key), cf.get(key)]);
+      }), 10000).then(function (res) {
+        if (seq !== boardSeq) return;
+        var list = Array.isArray(res && res[0]) ? res[0] : [];
+        var mine = res && res[1];
+        var rows = [];
+        for (var j = 0; j < list.length; j++) {
+          var e = list[j];
+          if (!e || typeof e !== 'object') continue;
+          var id = typeof e.userId === 'string' ? e.userId.trim() : '';
+          var sc = e.value && typeof e.value === 'object' ? cleanScore(e.value.s) : 0;
+          if (!id || !sc || (userId && id === userId)) continue;
+          rows.push({ me: false, id: id, name: cleanStr(e.name, 40), avatar: cleanAv(e.avatar), score: sc });
+        }
+        var myScore = mine && typeof mine === 'object' ? cleanScore(mine.s) : 0;
+        if (myScore) {
+          var prof = myProfile();
+          rows.push({ me: true, id: userId, name: prof.name, avatar: prof.avatar, score: myScore });
+        }
+        rows.sort(function (a, b) { return b.score - a.score; });
+        rows = rows.slice(0, 20);
+        if (!rows.length) { boardMsg(t.empty); return; }
+        box.textContent = '';
+        rows.forEach(function (r, idx) {
+          r.rank = idx + 1;
+          box.appendChild(boardRow(r));
+        });
+      }, function () {
+        if (seq === boardSeq) boardMsg(t.error, true);
+      });
+      return;
+    }
     timed(attempt(function () {
-      return which === 'friends' ? Usion.leaderboard.friends({ limit: 20 }) : Usion.leaderboard.top({ limit: 10 });
-    }), 10000).then(function (rows) {
+      return cs.get('top:' + n);
+    }), 10000).then(function (raw) {
       if (seq !== boardSeq) return;
-      rows = Array.isArray(rows) ? rows : [];
-      if (!rows.length) { boardMsg(t.empty); return; }
+      var list = sanitiseTop(raw).slice(0, 10);
+      if (!list.length) { boardMsg(t.empty); return; }
       box.textContent = '';
-      rows.forEach(function (e, i) {
-        e = e || {};
-        box.appendChild(boardRow({ me: !!e.is_me, id: e.user_id, name: e.name, avatar: e.avatar, rank: e.rank || i + 1, score: e.score }));
+      list.forEach(function (e, idx) {
+        box.appendChild(boardRow({ me: !!(userId && e.u === userId), id: e.u, name: e.n, avatar: e.a, rank: idx + 1, score: e.s }));
       });
     }, function () {
       if (seq === boardSeq) boardMsg(t.error, true);
@@ -1068,6 +1201,7 @@
     $('boardBody').appendChild(boardEl);
     $('boardDlg').hidden = false;
     syncClock();
+    lbN = validCount(R && !R.over ? R.n : endRes ? endRes.n : roundN);
     loadBoard();
   }
   function closeBoard() {
@@ -1133,6 +1267,12 @@
     $('retry').addEventListener('click', function () { submitScore(current); });
     $('tabF').addEventListener('click', function () { showTab('friends'); });
     $('tabG').addEventListener('click', function () { showTab('global'); });
+    $('lbCounts').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-n]');
+      if (!b) return;
+      lbN = validCount(Number(b.getAttribute('data-n')));
+      loadBoard();
+    });
     $('muteBtn').addEventListener('click', toggleMute);
     doc.addEventListener('visibilitychange', onVisChange);
     doc.addEventListener('pointerdown', onUnlock, { capture: true, passive: true });
