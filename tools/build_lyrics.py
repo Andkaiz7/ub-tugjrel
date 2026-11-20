@@ -27,8 +27,14 @@ EN_PREFIXES = (
     "slut",
     "cocaine",
     "xanax",
+    "cunt",
+    "asshol",
+    "fagg",
+    "dildo",
+    "blowjob",
+    "titt",
 )
-EN_EXACT = {"dick", "weed"}
+EN_EXACT = {"ass", "asses", "hoe", "hoes", "cock", "cocks", "tits", "dick", "dicks", "weed", "horny"}
 MN_PREFIXES = ("пизд", "бля", "сука", "ёба", "гичий", "янхан")
 
 ARTIST_SPLIT_RE = re.compile(
@@ -122,13 +128,19 @@ def safe_target(line: str) -> bool:
     return not UNSAFE_LINE_RE.search(line) and not LOWER_CYR_START_RE.match(line)
 
 
-def excerpts(lines: list[str], k: int = 5) -> list[tuple[str, str]]:
+def excerpts(
+    lines: list[str],
+    k: int = 5,
+    max_words: int = 12,
+    target_ok=safe_target,
+    prev_ok=safe_prev,
+) -> list[tuple[str, str]]:
     if k <= 0 or len(lines) < 2:
         return []
     candidates = [
         i
         for i in range(1, len(lines))
-        if 4 <= len(lines[i].split()) <= 12 and safe_target(lines[i]) and safe_prev(lines[i - 1])
+        if 4 <= len(lines[i].split()) <= max_words and target_ok(lines[i]) and prev_ok(lines[i - 1])
     ]
     if not candidates:
         return []
@@ -185,7 +197,7 @@ def build(songs: list[dict], version: str, dropped: list[str] | None = None) -> 
     groups = []
     for name, group in raw_groups.items():
         excerpt_total = sum(len(s["x"]) for s in group["songs"])
-        if len(group["songs"]) < 5 or excerpt_total < 10:
+        if len(group["songs"]) < 3 or excerpt_total < 10:
             continue
         gid = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
         groups.append(
@@ -232,6 +244,15 @@ def main():
     data = build(songs, version, dropped=dropped)
     for line in dropped:
         print(line)
+    intl_path = os.path.join(tools_dir, "intl-groups.json")
+    if os.path.exists(intl_path):
+        with open(intl_path, "r", encoding="utf-8") as f:
+            intl_groups = json.load(f)
+        known = {g["id"] for g in data["groups"]}
+        for g in intl_groups:
+            if g["id"] not in known:
+                known.add(g["id"])
+                data["groups"].append(g)
     out_dir = os.path.join(repo_root, "ugee-buu-mart")
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "lyrics-data.js")
