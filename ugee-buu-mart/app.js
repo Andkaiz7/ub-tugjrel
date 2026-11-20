@@ -4,7 +4,7 @@
   var TXT = {
     mn: {
       lives: 'Амь', score: 'Оноо', lines: 'мөр', pick: 'Дуучнаа сонго', search: 'Хайх', packs: 'Багц',
-      singers: 'Дуучид', none: 'Олдсонгүй', close: 'Хаах', again: 'Дахин', friends: 'Найзууд',
+      intl: 'Гадаад', singers: 'Дуучид', unpick: 'Хасах', none: 'Олдсонгүй', close: 'Хаах', again: 'Дахин', friends: 'Найзууд',
       global: 'Дэлхий', next: 'Дараагийн дуучин', perfect: 'Төгс!', done: 'Дууслаа', out: 'Амь дууслаа',
       saving: 'Хадгалж байна…', saved: 'Хадгалагдлаа', failed: 'Хадгалагдаагүй', guest: 'Нэвтэрч байж хадгална',
       retry: 'Дахин илгээх', loading: 'Ачаалж байна…', empty: 'Одоохондоо хоосон', error: 'Ачаалж чадсангүй',
@@ -12,7 +12,7 @@
     },
     en: {
       lives: 'Lives', score: 'Score', lines: 'lines', pick: 'Pick a singer', search: 'Search', packs: 'Packs',
-      singers: 'Singers', none: 'No match', close: 'Close', again: 'Again', friends: 'Friends',
+      intl: 'International', singers: 'Singers', unpick: 'Remove', none: 'No match', close: 'Close', again: 'Again', friends: 'Friends',
       global: 'Global', next: 'Next singer', perfect: 'Perfect!', done: 'Finished', out: 'Out of lives',
       saving: 'Saving…', saved: 'Saved', failed: 'Not saved', guest: 'Sign in to save',
       retry: 'Retry', loading: 'Loading…', empty: 'No records yet', error: 'Could not load',
@@ -238,7 +238,7 @@
     return g.songs.reduce(function (n, s) { return n + s.x.length; }, 0);
   }
   function autoGroup() {
-    var list = SORTED.filter(function (g) { return !g.pack; });
+    var list = SORTED.filter(function (g) { return !g.pack && !g.intl; });
     if (list.length) loadSeen(list[0].id);
     return sGet(KEY_LAST, FAST_MS).then(function (gid) {
       var saved = groupById(gid);
@@ -930,15 +930,60 @@
     b.setAttribute('aria-pressed', String(on));
     renderPickerFoot();
   }
+  function unpick(id) {
+    var at = pickerSel.indexOf(id);
+    if (at >= 0) pickerSel.splice(at, 1);
+    var bs = doc.querySelectorAll('#pkList .sg');
+    for (var i = 0; i < bs.length; i++) {
+      if (bs[i].getAttribute('data-gid') === id) {
+        bs[i].classList.remove('on');
+        bs[i].setAttribute('aria-pressed', 'false');
+      }
+    }
+    renderPickerFoot();
+  }
+  function renderSel() {
+    var box = $('pkSel');
+    var prev = box.children.length;
+    box.textContent = '';
+    pickerSel.forEach(function (id) {
+      var g = groupById(id);
+      if (!g) return;
+      var b = el('button', 'selc');
+      var av = el('span', 'av');
+      var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      var path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+      b.type = 'button';
+      b.setAttribute('data-gid', id);
+      b.setAttribute('aria-label', g.name + ', ' + t.unpick);
+      av.setAttribute('aria-hidden', 'true');
+      paintAv(av, g);
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('aria-hidden', 'true');
+      path.setAttribute('d', 'M6 6l12 12M18 6L6 18');
+      path.setAttribute('stroke', 'currentColor');
+      path.setAttribute('stroke-width', '2.6');
+      path.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(path);
+      b.appendChild(av);
+      b.appendChild(el('span', 'nm', g.name));
+      b.appendChild(svg);
+      b.addEventListener('click', function () { unpick(id); });
+      box.appendChild(b);
+    });
+    box.hidden = pickerSel.length === 0;
+    if (box.children.length > prev) box.scrollLeft = box.scrollWidth;
+  }
   function renderGrid(box, q, onPick, curId, opts) {
     var multi = !!(opts && opts.multi);
     var query = String(q || '').trim().toLowerCase();
     var cur = curId !== undefined ? curId : R && R.g ? R.g.id : '';
     var any = false;
     box.textContent = '';
-    [[t.packs, true], [t.singers, false]].forEach(function (sec) {
+    [[t.packs, 'pack'], [t.intl, 'intl'], [t.singers, 'mn']].forEach(function (sec) {
       var list = SORTED.filter(function (g) {
-        return !!g.pack === sec[1] && (!query || String(g.name).toLowerCase().indexOf(query) >= 0);
+        var kind = g.pack ? 'pack' : g.intl ? 'intl' : 'mn';
+        return kind === sec[1] && (!query || String(g.name).toLowerCase().indexOf(query) >= 0);
       });
       if (!list.length) return;
       any = true;
@@ -976,6 +1021,7 @@
     var go = $('pkGo');
     go.disabled = k === 0;
     setText(go, k > 0 ? t.start + ' (' + k + ')' : t.start);
+    renderSel();
   }
   function pickSolo(g, n) {
     var count = n != null ? validCount(n) : roundN;

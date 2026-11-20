@@ -254,6 +254,8 @@ def main_flow(b):
     assert pg.evaluate("document.querySelectorAll('#pkList .sg').length") == n_groups
     assert pg.evaluate("document.querySelector('#pkList .sg.on').dataset.gid") == PICK
     assert pg.get_attribute('#pkList .sg[data-gid="%s"]' % PICK, 'aria-pressed') == 'true'
+    assert pg.is_visible('#pkSel')
+    assert pg.evaluate("[...document.querySelectorAll('#pkSel .selc')].map(e => e.dataset.gid)") == [PICK]
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(OUT / 'picker.png'))
     pg.click('#pkX')
@@ -263,6 +265,13 @@ def main_flow(b):
     assert pg.is_disabled('#pkGo')
     pg.fill('#pkQ', 'чойжоо')
     assert pg.evaluate("[...document.querySelectorAll('#pkList .sg')].map(e => e.dataset.gid)") == [CHIP_PICK]
+    pg.click('#pkList .sg[data-gid="%s"]' % CHIP_PICK)
+    assert not pg.is_disabled('#pkGo')
+    assert pg.is_visible('#pkSel')
+    assert pg.evaluate("[...document.querySelectorAll('#pkSel .selc')].map(e => e.dataset.gid)") == [CHIP_PICK]
+    pg.click('#pkSel .selc[data-gid="%s"]' % CHIP_PICK)
+    assert pg.is_hidden('#pkSel')
+    assert pg.is_disabled('#pkGo')
     pg.click('#pkList .sg[data-gid="%s"]' % CHIP_PICK)
     assert not pg.is_disabled('#pkGo')
     pg.click('#pkGo')
