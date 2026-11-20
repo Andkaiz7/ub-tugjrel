@@ -146,7 +146,8 @@
     try { if (usr && typeof usr.getAvatar === 'function') av = cleanAv(usr.getAvatar()); } catch (e) {}
     return { name: name, avatar: av };
   }
-  function sanitiseTop(raw) {
+  function sanitiseTop(raw, n) {
+    var cap = 150 * validCount(n);
     if (!Array.isArray(raw)) return [];
     var byU = Object.create(null);
     for (var i = 0; i < raw.length; i++) {
@@ -155,7 +156,8 @@
       var u = typeof e.u === 'string' ? e.u.trim() : '';
       var s = cleanScore(e.s);
       if (!u || !s) continue;
-      var item = { u: u, n: cleanStr(e.n, 40), a: cleanAv(e.a), s: s };
+      if (s > cap) continue;
+      var item = { u: u, n: cleanStr(e.n, 40), s: s };
       if (!byU[u] || s > byU[u].s) byU[u] = item;
     }
     var out = Object.keys(byU).map(function (k) { return byU[k]; });
@@ -859,14 +861,14 @@
         return timed(attempt(function () { return cf.set(fKey, { s: score }); }), 8000);
       });
       var sP = timed(attempt(function () { return cs.get(sKey); }), 8000).then(function (raw) {
-        var list = sanitiseTop(raw);
+        var list = sanitiseTop(raw, n);
         for (var i = 0; i < list.length; i++) {
           if (list[i].u === userId && list[i].s >= score) return;
         }
         var me = myProfile();
         var next = list.filter(function (x) { return x.u !== userId; });
-        next.push({ u: userId, n: me.name, a: me.avatar, s: score });
-        next = sanitiseTop(next);
+        next.push({ u: userId, n: me.name, s: score });
+        next = sanitiseTop(next, n);
         var inTop = false;
         for (var j = 0; j < next.length; j++) {
           if (next[j].u === userId) { inTop = true; break; }
@@ -994,7 +996,7 @@
           if (!e || typeof e !== 'object') continue;
           var id = typeof e.userId === 'string' ? e.userId.trim() : '';
           var sc = e.value && typeof e.value === 'object' ? cleanScore(e.value.s) : 0;
-          if (!id || !sc || (userId && id === userId)) continue;
+          if (!id || !sc || sc > 150 * n || (userId && id === userId)) continue;
           rows.push({ me: false, id: id, name: cleanStr(e.name, 40), avatar: cleanAv(e.avatar), score: sc });
         }
         var myScore = mine && typeof mine === 'object' ? cleanScore(mine.s) : 0;
@@ -1019,11 +1021,11 @@
       return cs.get('top:' + n);
     }), 10000).then(function (raw) {
       if (seq !== boardSeq) return;
-      var list = sanitiseTop(raw).slice(0, 10);
+      var list = sanitiseTop(raw, n).slice(0, 10);
       if (!list.length) { boardMsg(t.empty); return; }
       box.textContent = '';
       list.forEach(function (e, idx) {
-        box.appendChild(boardRow({ me: !!(userId && e.u === userId), id: e.u, name: e.n, avatar: e.a, rank: idx + 1, score: e.s }));
+        box.appendChild(boardRow({ me: !!(userId && e.u === userId), id: e.u, name: e.n, avatar: userId && e.u === userId ? myProfile().avatar : '', rank: idx + 1, score: e.s }));
       });
     }, function () {
       if (seq === boardSeq) boardMsg(t.error, true);
