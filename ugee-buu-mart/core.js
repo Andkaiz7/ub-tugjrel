@@ -53,29 +53,11 @@
     return a;
   }
 
-  function interleave(buckets, group, rnd) {
-    var by = {};
-    var keys = [];
-    buckets.forEach(function (b) {
-      var k = group.songs[b[0].s].gid;
-      if (!by[k]) { by[k] = []; keys.push(k); }
-      by[k].push(b);
-    });
-    keys = shuffle(keys, rnd);
-    var out = [];
-    for (var i = 0; out.length < buckets.length; i++) {
-      keys.forEach(function (k) { if (by[k][i]) out.push(by[k][i]); });
-    }
-    return out;
-  }
-
-  function pickRefs(group, seen, n, rnd) {
-    var count = n === undefined ? ROUND : n;
-    var seenList = seen || [];
-    var seenSet = new Set(seenList);
+  function pickFrom(group, songIdx, seenList, seenSet, count, rnd) {
     var byId = new Map();
     var songBuckets = [];
-    for (var s = 0; s < group.songs.length; s++) {
+    for (var t = 0; t < songIdx.length; t++) {
+      var s = songIdx[t];
       var xs = group.songs[s].x;
       var bucket = [];
       for (var e = 0; e < xs.length; e++) {
@@ -92,7 +74,6 @@
     var firstPass = [];
     var restUnseen = [];
     var shuffledBuckets = shuffle(songBuckets, rnd);
-    if (group.mix) shuffledBuckets = interleave(shuffledBuckets, group, rnd);
     for (var i = 0; i < shuffledBuckets.length; i++) {
       var b = shuffledBuckets[i];
       firstPass.push(b[0]);
@@ -115,6 +96,50 @@
       }
     }
     return result.slice(0, count);
+  }
+
+  function pickRefs(group, seen, n, rnd) {
+    var count = n === undefined ? ROUND : n;
+    var seenList = seen || [];
+    var seenSet = new Set(seenList);
+    if (!group.mix) {
+      var all = [];
+      for (var s = 0; s < group.songs.length; s++) all.push(s);
+      return pickFrom(group, all, seenList, seenSet, count, rnd);
+    }
+    var bySinger = {};
+    var cap = {};
+    var keys = [];
+    for (var s = 0; s < group.songs.length; s++) {
+      var k = group.songs[s].gid;
+      if (!bySinger[k]) {
+        bySinger[k] = [];
+        cap[k] = 0;
+        keys.push(k);
+      }
+      bySinger[k].push(s);
+      cap[k] += group.songs[s].x.length;
+    }
+    keys = shuffle(keys, rnd);
+    var quota = {};
+    for (var i = 0; i < keys.length; i++) quota[keys[i]] = 0;
+    var left = count;
+    var moved = true;
+    while (left > 0 && moved) {
+      moved = false;
+      for (var i = 0; i < keys.length && left > 0; i++) {
+        if (quota[keys[i]] < cap[keys[i]]) {
+          quota[keys[i]]++;
+          left--;
+          moved = true;
+        }
+      }
+    }
+    var out = [];
+    for (var i = 0; i < keys.length; i++) {
+      if (quota[keys[i]] > 0) out = out.concat(pickFrom(group, bySinger[keys[i]], seenList, seenSet, quota[keys[i]], rnd));
+    }
+    return shuffle(out, rnd);
   }
 
   function question(group, ref, q, rnd) {

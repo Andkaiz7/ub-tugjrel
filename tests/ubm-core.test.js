@@ -148,6 +148,27 @@ assert.deepStrictEqual(
   elevenSeen.slice(0, 9)
 );
 
+const tiny = function (id, pre) {
+  return { id: id, name: id, songs: [{ t: id, x: [[pre + "1", "a", "нэг хоёр гурав дөрөв"], [pre + "2", "b", "тав зургаа долоо найм"], [pre + "3", "c", "ес арав зуу мянга"]] }] };
+};
+const mixed = core.mix([tiny("gA", "a"), tiny("gB", "b"), group]);
+const perGid = function (refs) {
+  const n = {};
+  refs.forEach(function (r) { const g = mixed.songs[r.s].gid; n[g] = (n[g] || 0) + 1; });
+  return n;
+};
+const allASeen = ["a1", "a2", "a3"];
+const fair = core.pickRefs(mixed, allASeen, 9, core.rng(5));
+assert.deepStrictEqual(perGid(fair), { gA: 3, gB: 3, grp00001: 3 });
+assert.deepStrictEqual(core.pickRefs(mixed, allASeen, 9, core.rng(5)), fair);
+assert.deepStrictEqual(perGid(core.pickRefs(mixed, [], 10, core.rng(6))), { gA: 3, gB: 3, grp00001: 4 });
+let blocky = 0;
+for (let seed = 1; seed <= 30; seed++) {
+  const g = core.pickRefs(mixed, [], 9, core.rng(seed)).map(function (r) { return mixed.songs[r.s].gid; });
+  if (g.every(function (x, i) { return i < 3 || x === g[i - 3]; })) blocky++;
+}
+assert.ok(blocky < 5, "mixed singers must be shuffled, not dealt in A-B-C blocks");
+
 assert.strictEqual(core.lineScore(0), 150);
 assert.strictEqual(core.lineScore(15000), 100);
 assert.strictEqual(core.lineScore(99999), 100);
