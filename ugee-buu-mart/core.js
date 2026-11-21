@@ -6,6 +6,7 @@
   var ROUND = 10;
   var LIVES = 3;
   var SPEED_MS = 15000;
+  var COMBO_STEP = 3;
   var NORM_RE = /^[.,!?;:"'«»()…–—-]+|[.,!?;:"'«»()…–—-]+$/g;
 
   function rng(seed) {
@@ -275,9 +276,23 @@
     return norm(tile) === norm(Q.answer[filled]);
   }
 
-  function lineScore(ms) {
+  function comboMul(streak) {
+    return streak >= 2 * COMBO_STEP ? 3 : streak >= COMBO_STEP ? 2 : 1;
+  }
+
+  function refills(streak) {
+    return streak > 0 && streak % COMBO_STEP === 0;
+  }
+
+  function lineScore(ms, streak) {
     var t = ms < 0 ? 0 : ms;
-    return 100 + Math.round(50 * Math.max(0, 1 - t / SPEED_MS));
+    return (100 + Math.round(50 * Math.max(0, 1 - t / SPEED_MS))) * comboMul(streak | 0);
+  }
+
+  function maxScore(n) {
+    var total = 0;
+    for (var i = 1; i <= n; i++) total += lineScore(0, i);
+    return total;
   }
 
   function standings(roster, acts, total) {
@@ -296,31 +311,41 @@
         answered: 0,
         lives: LIVES,
         done: false,
-        ms: 0
+        ms: 0,
+        streak: 0
       };
       rowsById.set(id, row);
       orderById.set(id, i);
       rows.push(row);
     }
     var seenActs = new Set();
+    var actsById = new Map();
     for (var i = 0; i < entries.length; i++) {
       var act = entries[i];
-      var row = rowsById.get(act.player_id);
-      if (!row) continue;
+      if (!rowsById.has(act.player_id)) continue;
       var q = act.q | 0;
       if (q < 0 || q >= n) continue;
       var key = act.player_id + "\0" + q;
       if (seenActs.has(key)) continue;
       seenActs.add(key);
-      var ms = Math.max(0, +act.ms || 0);
-      var lives = Math.max(0, Math.min(LIVES, act.lives | 0));
-      row.answered += 1;
-      row.ms += ms;
-      if (act.ok) {
-        row.score += lineScore(ms);
-      }
-      row.lives = Math.min(row.lives, lives);
+      if (!actsById.has(act.player_id)) actsById.set(act.player_id, []);
+      actsById.get(act.player_id).push(act);
     }
+    actsById.forEach(function (list, id) {
+      var row = rowsById.get(id);
+      list.sort(function (a, b) { return (a.q | 0) - (b.q | 0); });
+      for (var j = 0; j < list.length; j++) {
+        var act = list[j];
+        var ms = Math.max(0, +act.ms || 0);
+        row.answered += 1;
+        row.ms += ms;
+        row.streak = act.ok && act.c === true ? row.streak + 1 : 0;
+        if (act.ok) {
+          row.score += lineScore(ms, row.streak);
+        }
+        row.lives = Math.max(0, Math.min(LIVES, act.lives | 0));
+      }
+    });
     for (var i = 0; i < rows.length; i++) {
       rows[i].done = rows[i].answered >= n || rows[i].lives <= 0;
     }
@@ -338,6 +363,7 @@
     ROUND: ROUND,
     LIVES: LIVES,
     SPEED_MS: SPEED_MS,
+    COMBO_STEP: COMBO_STEP,
     rng: rng,
     seedOf: seedOf,
     words: words,
@@ -349,6 +375,9 @@
     mix: mix,
     tileOk: tileOk,
     lineScore: lineScore,
+    comboMul: comboMul,
+    refills: refills,
+    maxScore: maxScore,
     standings: standings
   };
 

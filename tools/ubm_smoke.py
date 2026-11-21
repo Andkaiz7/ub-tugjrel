@@ -252,7 +252,7 @@ def main_flow(b):
     assert len(set(ids)) == 10 and not set(ids) & set(seen_before), (ids, seen_before)
     pg.wait_for_function("UBM.state().screen === 'end'", timeout=3000)
     s = st(pg)
-    assert s['lives'] == 3 and 1000 <= s['score'] <= 1500, s
+    assert s['lives'] == 3 and 2300 <= s['score'] <= 3450, s
     assert pg.text_content('#endHead') == 'Төгс!'
     assert pg.evaluate("__stub.store['ubm:seen:%s'].length" % PICK) == 12
 
@@ -735,6 +735,22 @@ OSC_SPY = """(() => {
 })();"""
 
 
+def refill_flow(b):
+    pg, errors = new_page(b, {'width': 390, 'height': 844}, True)
+    wait_round(pg)
+    wrong_tap(pg)
+    answer_line(pg)
+    assert st(pg)['lives'] == 2
+    for _ in range(2):
+        answer_line(pg)
+    assert st(pg)['lives'] == 2
+    answer_line(pg)
+    assert st(pg)['lives'] == 3, 'three clean lines in a row give a heart back'
+    assert pg.evaluate("document.querySelectorAll('#hearts i.off').length") == 0
+    assert not errors, errors
+    pg.context.close()
+
+
 def sfx_flow(b):
     pg, errors = new_page(b, {'width': 390, 'height': 844}, True, extra=OSC_SPY)
     wait_round(pg)
@@ -843,6 +859,7 @@ with sync_playwright() as p:
     media_flow(browser)
     skip_flow(browser)
     sfx_flow(browser)
+    refill_flow(browser)
     multi_flow(browser)
     shots(browser, {'width': 360, 'height': 640}, 'small')
     shots(browser, {'width': 390, 'height': 844}, 'en', '?lang=en')

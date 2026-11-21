@@ -183,7 +183,7 @@ def main_match(b):
     p1.wait_for_function('__stub.calls.submit.length === 1', timeout=5000)
     assert p1.evaluate(NO_SEEN) == 0 and p2.evaluate(NO_SEEN) == 0, 'a race never touches solo seen-progress'
     score1 = p1.evaluate('__stub.calls.submit[0].score')
-    assert 1000 <= score1 <= 1500 and p1.evaluate('__stub.calls.submit[0].meta.lines') == 10
+    assert 2300 <= score1 <= 3450 and p1.evaluate('__stub.calls.submit[0].meta.lines') == 10
 
     p1.click('#results .chatBtn')
     assert p1.is_visible('#chat')
