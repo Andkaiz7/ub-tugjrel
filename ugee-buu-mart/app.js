@@ -82,6 +82,9 @@
   var audioTried = false;
   var fadeTimer = 0;
   var musicSeq = 0;
+  var comboSeq = 0;
+  var confettiEl = null;
+  var confettiTimer = 0;
   var hasOwn = Object.prototype.hasOwnProperty;
 
   function $(id) { return doc.getElementById(id); }
@@ -536,34 +539,48 @@
       setGain(BGM_VOL, 400);
     }
   }
-  function sfx(ok) {
+  var SFX_CUES = {
+    ok: { type: 'triangle', vol: SFX_OK_VOL, notes: [[880, 0, 0.12], [1318.5, 0.08, 0.22]] },
+    bad: { type: 'square', vol: SFX_BAD_VOL, notes: [[196, 0, 0.16], [146.8, 0.13, 0.26]] },
+    line: { type: 'triangle', vol: 0.16, notes: [[1046.5, 0.18, 0.14], [1318.5, 0.25, 0.14], [1568, 0.32, 0.24]] },
+    combo: { type: 'sine', vol: 0.14, notes: [[880, 0.36, 0.22, 1760], [1318.5, 0.42, 0.2, 2093]] },
+    heart: { type: 'sine', vol: 0.15, notes: [[523.25, 0.42, 0.16], [659.25, 0.52, 0.24]] },
+    win: { type: 'triangle', vol: 0.18, notes: [[523.25, 0, 0.13], [659.25, 0.09, 0.13], [783.99, 0.18, 0.14], [1046.5, 0.28, 0.32]] },
+    over: { type: 'triangle', vol: 0.16, notes: [[392, 0, 0.16], [349.23, 0.14, 0.16], [311.13, 0.28, 0.28, 261.63]] }
+  };
+  function sfx(cue) {
     if (muted) return;
-    ensureAudio();
-    var AC = root.AudioContext || root.webkitAudioContext;
-    if (!actx && !sctx && AC) {
-      try { sctx = new AC(); } catch (e) { sctx = null; }
-    }
-    var ctx = actx || sctx;
-    if (!ctx || ctx.state === 'closed') return;
-    if (ctx.state !== 'running') attempt(function () { return ctx.resume(); }).catch(noop);
-    var now = ctx.currentTime;
-    var notes = ok ? [[880, 0, 0.12], [1318.5, 0.08, 0.22]] : [[196, 0, 0.16], [146.8, 0.13, 0.26]];
-    notes.forEach(function (n) {
-      try {
-        var o = ctx.createOscillator();
-        var gn = ctx.createGain();
-        var t0 = now + n[1];
-        o.type = ok ? 'triangle' : 'square';
-        o.frequency.setValueAtTime(n[0], t0);
-        gn.gain.setValueAtTime(0.0001, t0);
-        gn.gain.exponentialRampToValueAtTime(ok ? SFX_OK_VOL : SFX_BAD_VOL, t0 + 0.012);
-        gn.gain.exponentialRampToValueAtTime(0.0001, t0 + n[2]);
-        o.connect(gn);
-        gn.connect(ctx.destination);
-        o.start(t0);
-        o.stop(t0 + n[2] + 0.02);
-      } catch (e) {}
-    });
+    var key = cue === true ? 'ok' : cue === false ? 'bad' : cue;
+    var cfg = SFX_CUES[key];
+    if (!cfg) return;
+    try {
+      ensureAudio();
+      var AC = root.AudioContext || root.webkitAudioContext;
+      if (!actx && !sctx && AC) {
+        try { sctx = new AC(); } catch (e) { sctx = null; }
+      }
+      var ctx = actx || sctx;
+      if (!ctx || ctx.state === 'closed') return;
+      if (ctx.state !== 'running') attempt(function () { return ctx.resume(); }).catch(noop);
+      var now = ctx.currentTime;
+      cfg.notes.forEach(function (n) {
+        try {
+          var o = ctx.createOscillator();
+          var gn = ctx.createGain();
+          var t0 = now + n[1];
+          o.type = cfg.type;
+          o.frequency.setValueAtTime(n[0], t0);
+          if (n[3]) o.frequency.exponentialRampToValueAtTime(n[3], t0 + n[2]);
+          gn.gain.setValueAtTime(0.0001, t0);
+          gn.gain.exponentialRampToValueAtTime(cfg.vol, t0 + 0.012);
+          gn.gain.exponentialRampToValueAtTime(0.0001, t0 + n[2]);
+          o.connect(gn);
+          gn.connect(ctx.destination);
+          o.start(t0);
+          o.stop(t0 + n[2] + 0.02);
+        } catch (e) {}
+      });
+    } catch (e) {}
   }
   function toggleMute() {
     muteTouched = true;
@@ -593,11 +610,81 @@
     }
   }
 
+  function clearConfetti() {
+    clearTimeout(confettiTimer);
+    confettiTimer = 0;
+    if (confettiEl && confettiEl.parentNode) confettiEl.parentNode.removeChild(confettiEl);
+    confettiEl = null;
+  }
+  function launchConfetti() {
+    clearConfetti();
+    if (reduce) return;
+    var host = $('end');
+    if (!host) return;
+    var cols = ['var(--g2)', 'var(--g1)', '#22d3ee', '#8b5cf6', '#ec4899'];
+    var wrap = el('div', 'confetti');
+    wrap.setAttribute('aria-hidden', 'true');
+    for (var i = 0; i < 80; i++) {
+      var p = el('span', 'confetti-piece');
+      var w = 6 + Math.random() * 5;
+      var h = Math.random() < 0.25 ? w : 9 + Math.random() * 6;
+      p.style.setProperty('--x', (3 + Math.random() * 94).toFixed(2) + '%');
+      p.style.setProperty('--dx', ((Math.random() - 0.5) * 140).toFixed(1) + 'px');
+      p.style.setProperty('--rot', ((Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540)).toFixed(0) + 'deg');
+      p.style.setProperty('--rx', (360 + Math.random() * 540).toFixed(0) + 'deg');
+      p.style.setProperty('--dur', (2.15 + Math.random() * 0.55).toFixed(2) + 's');
+      p.style.setProperty('--del', (Math.random() * 0.32).toFixed(2) + 's');
+      p.style.setProperty('--w', w.toFixed(1) + 'px');
+      p.style.setProperty('--h', h.toFixed(1) + 'px');
+      p.style.setProperty('--r', w === h ? '50%' : '2px');
+      p.style.setProperty('--c', cols[i % cols.length]);
+      wrap.appendChild(p);
+    }
+    host.appendChild(wrap);
+    confettiEl = wrap;
+    confettiTimer = setTimeout(clearConfetti, 3100);
+  }
+  function syncCombo(mul, pop, instant) {
+    var c = $('combo');
+    if (!c) return;
+    comboSeq++;
+    var seq = comboSeq;
+    if (mul > 1) {
+      c.removeAttribute('data-closing');
+      c.setAttribute('data-mul', String(mul));
+      setText(c, '🔥 x' + mul);
+      c.hidden = false;
+      if (pop && !reduce) replay(c, 'pop');
+      else c.classList.remove('pop');
+      return;
+    }
+    c.classList.remove('pop');
+    if (instant || reduce) {
+      c.hidden = true;
+      c.removeAttribute('data-closing');
+      c.textContent = '';
+      return;
+    }
+    if (c.hidden || c.hasAttribute('data-closing')) return;
+    c.setAttribute('data-closing', '');
+    var done = function () {
+      if (seq !== comboSeq) return;
+      c.hidden = true;
+      c.removeAttribute('data-closing');
+      c.textContent = '';
+    };
+    var anims = typeof c.getAnimations === 'function' ? c.getAnimations() : [];
+    if (anims.length) {
+      Promise.allSettled(anims.map(function (a) { return a.finished; })).then(done);
+    }
+    setTimeout(done, 280);
+  }
   function screen(name) {
     closeBoard();
     scr = name;
     var els = doc.querySelectorAll('[data-screen]');
     for (var i = 0; i < els.length; i++) els[i].hidden = els[i].getAttribute('data-screen') !== name;
+    if (name !== 'end') clearConfetti();
     if (name !== 'round') {
       soloSeq++;
       if (R && !R.over) {
@@ -660,6 +747,7 @@
       t0: 0, pausedAt: 0, timer: 0
     };
     screen('round');
+    syncCombo(C.comboMul(R.streak), false, true);
     nextQ();
   }
   function nextQ() {
@@ -716,6 +804,7 @@
       tray.appendChild(b);
     });
     $('pop').classList.remove('go');
+    $('pop').removeAttribute('data-mul');
     replay($('card'), 'in');
     $('stage').scrollTop = 0;
     music(Q);
@@ -738,9 +827,11 @@
       return;
     }
     if (b.classList.contains('bad')) return;
-    sfx(false);
+    var hadMul = C.comboMul(R.streak) > 1 && !R.miss;
+    sfx('bad');
     R.miss = true;
     R.lives = Math.max(0, R.lives - 1);
+    if (hadMul) syncCombo(1, false, false);
     replay(b, 'bad');
     clearTimeout(b._bad);
     b._bad = setTimeout(function () { b.classList.remove('bad'); }, 600);
@@ -756,17 +847,33 @@
     var ms = elapsed();
     var r = R;
     var clean = !r.miss;
+    var prevMul = C.comboMul(r.streak);
     r.streak = clean ? r.streak + 1 : 0;
+    var mul = C.comboMul(r.streak);
     var pts = C.lineScore(ms, r.streak);
-    if (clean && C.refills(r.streak) && r.lives < C.LIVES) r.lives++;
+    var gained = clean && C.refills(r.streak) && r.lives < C.LIVES;
+    if (gained) r.lives++;
     r.lock = true;
     r.score += pts;
     r.lines++;
     $('line').className = 'win';
-    $('pop').textContent = '+' + pts;
+    $('pop').textContent = mul > 1 ? '+' + pts + ' x' + mul : '+' + pts;
+    if (mul > 1) $('pop').setAttribute('data-mul', String(mul));
+    else $('pop').removeAttribute('data-mul');
     replay($('pop'), 'go');
     renderHud();
     replay($('score'), 'bump');
+    sfx('line');
+    syncCombo(mul, mul > prevMul, false);
+    if (mul > prevMul) sfx('combo');
+    if (gained) {
+      var gh = $('hearts').children[r.lives - 1];
+      if (gh) {
+        replay(gh, 'gain');
+        setTimeout(function () { gh.classList.remove('gain'); }, 800);
+      }
+      sfx('heart');
+    }
     call(r.onLine, r.i, true, ms, r.lives, clean);
     r.timer = setTimeout(function () { if (R === r && !r.over) nextQ(); }, NEXT_MS);
   }
@@ -777,6 +884,7 @@
     var ss = slots();
     r.lock = true;
     r.streak = 0;
+    syncCombo(1, false, false);
     for (var k = r.filled; k < ss.length; k++) {
       ss[k].textContent = Q.answer[k];
       ss[k].className = 'slot miss';
@@ -790,6 +898,7 @@
     var r = R;
     r.over = true;
     clearTimeout(r.timer);
+    sfx(r.lives > 0 ? 'win' : 'over');
     var res = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
       uid: userId, mode: r.mode, gid: r.g.id, n: r.n || r.qs.length, score: r.score, lives: r.lives, lines: r.lines,
@@ -807,6 +916,7 @@
     $('end').scrollTop = 0;
     $('endQ').value = '';
     renderEnd();
+    if (!(res.lives <= 0) && res.lines >= res.total && res.lives >= C.LIVES) launchConfetti();
     countUp($('endScore'), res.score || 0);
     renderGrid($('endPk'), '', function (g) { pickSolo(g, roundN); });
     if (current !== res) {

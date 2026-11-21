@@ -747,6 +747,7 @@ def refill_flow(b):
     answer_line(pg)
     assert st(pg)['lives'] == 3, 'three clean lines in a row give a heart back'
     assert pg.evaluate("document.querySelectorAll('#hearts i.off').length") == 0
+    assert pg.is_visible('#combo') and 'x2' in pg.text_content('#combo'), pg.text_content('#combo')
     assert not errors, errors
     pg.context.close()
 
@@ -764,7 +765,7 @@ def sfx_flow(b):
     pg.click('#muteBtn')
     w = pg.evaluate('UBM.current().answer[0]')
     tap(pg, pg.evaluate(TILE_FOR, w))
-    assert pg.evaluate('__osc') == [880, 1319], pg.evaluate('__osc')
+    assert pg.evaluate('__osc')[:2] == [880, 1319], pg.evaluate('__osc')
     assert not errors, errors
     pg.context.close()
 
