@@ -382,7 +382,7 @@
       var q = d.q | 0;
       if (!M2 || M2.roster.indexOf(a.player_id) < 0 || q < 0 || q >= M2.total) return false;
       if (M2.ended && !(seq && seq <= M2.upto)) return false;
-      M2.acts.push({ player_id: a.player_id, q: q, ok: d.ok === true, ms: Math.min(3600000, Math.max(0, +d.ms || 0)), lives: Math.max(0, Math.min(C.LIVES, d.lives | 0)), seq: seq });
+      M2.acts.push({ player_id: a.player_id, q: q, ok: d.ok === true, ms: Math.min(3600000, Math.max(0, +d.ms || 0)), lives: Math.max(0, Math.min(C.LIVES, d.lives | 0)), c: d.c === true, seq: seq });
       if (a.player_id === me && echo && echo.q === q) echo = null;
       return true;
     }
@@ -433,8 +433,8 @@
     closeChat();
     UBM.startRound({
       group: g, qs: M.qs, n: M.n, mode: 'race',
-      from: row ? row.answered : 0, lives: row ? row.lives : C.LIVES, score: row ? row.score : 0, lines: okCount(M, me),
-      onLine: function (q, ok, ms, lives) { sendAns(M, { m: M.m, q: q, ok: ok, ms: ms, lives: lives }, 1); },
+      from: row ? row.answered : 0, lives: row ? row.lives : C.LIVES, score: row ? row.score : 0, lines: okCount(M, me), streak: row ? row.streak : 0,
+      onLine: function (q, ok, ms, lives, clean) { sendAns(M, { m: M.m, q: q, ok: ok, ms: ms, lives: lives, c: clean === true }, 1); },
       onEnd: function (res) { finishMine(M, res); }
     });
     renderStrip();

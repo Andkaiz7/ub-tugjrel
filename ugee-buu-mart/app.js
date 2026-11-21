@@ -150,7 +150,7 @@
     return { name: name, avatar: av };
   }
   function sanitiseTop(raw, n) {
-    var cap = 150 * validCount(n);
+    var cap = C.maxScore(validCount(n));
     if (!Array.isArray(raw)) return [];
     var byU = Object.create(null);
     for (var i = 0; i < raw.length; i++) {
@@ -656,7 +656,7 @@
     R = {
       g: g, qs: o.qs, n: o.n != null ? validCount(o.n) : o.qs.length, mode: race ? 'race' : 'solo', onLine: o.onLine, onEnd: o.onEnd,
       i: from - 1, lives: o.lives > 0 ? Math.min(C.LIVES, o.lives | 0) : C.LIVES,
-      score: Math.max(0, o.score | 0), lines: Math.max(0, o.lines | 0), filled: 0, used: [], lock: false, over: false,
+      score: Math.max(0, o.score | 0), lines: Math.max(0, o.lines | 0), streak: Math.max(0, o.streak | 0), miss: false, filled: 0, used: [], lock: false, over: false,
       t0: 0, pausedAt: 0, timer: 0
     };
     screen('round');
@@ -667,6 +667,7 @@
     if (R.i >= R.qs.length) { finish(); return; }
     R.filled = 0;
     R.used = [];
+    R.miss = false;
     R.lock = false;
     R.t0 = clock();
     R.pausedAt = 0;
@@ -738,6 +739,7 @@
     }
     if (b.classList.contains('bad')) return;
     sfx(false);
+    R.miss = true;
     R.lives = Math.max(0, R.lives - 1);
     replay(b, 'bad');
     clearTimeout(b._bad);
@@ -752,8 +754,11 @@
   }
   function lineDone() {
     var ms = elapsed();
-    var pts = C.lineScore(ms);
     var r = R;
+    var clean = !r.miss;
+    r.streak = clean ? r.streak + 1 : 0;
+    var pts = C.lineScore(ms, r.streak);
+    if (clean && C.refills(r.streak) && r.lives < C.LIVES) r.lives++;
     r.lock = true;
     r.score += pts;
     r.lines++;
@@ -762,7 +767,7 @@
     replay($('pop'), 'go');
     renderHud();
     replay($('score'), 'bump');
-    call(r.onLine, r.i, true, ms, r.lives);
+    call(r.onLine, r.i, true, ms, r.lives, clean);
     r.timer = setTimeout(function () { if (R === r && !r.over) nextQ(); }, NEXT_MS);
   }
   function revealRest(then) {
@@ -771,11 +776,12 @@
     var Q = r.qs[r.i];
     var ss = slots();
     r.lock = true;
+    r.streak = 0;
     for (var k = r.filled; k < ss.length; k++) {
       ss[k].textContent = Q.answer[k];
       ss[k].className = 'slot miss';
     }
-    call(r.onLine, r.i, false, ms, r.lives);
+    call(r.onLine, r.i, false, ms, r.lives, false);
     r.timer = setTimeout(function () { if (R === r && !r.over) then(); }, LOST_MS);
   }
   function lineLost() { revealRest(finish); }
@@ -1030,7 +1036,7 @@
           if (!e || typeof e !== 'object') continue;
           var id = typeof e.userId === 'string' ? e.userId.trim() : '';
           var sc = e.value && typeof e.value === 'object' ? cleanScore(e.value.s) : 0;
-          if (!id || !sc || sc > 150 * n || (userId && id === userId)) continue;
+          if (!id || !sc || sc > C.maxScore(n) || (userId && id === userId)) continue;
           rows.push({ me: false, id: id, name: cleanStr(e.name, 40), avatar: cleanAv(e.avatar), score: sc });
         }
         var myScore = mine && typeof mine === 'object' ? cleanScore(mine.s) : 0;

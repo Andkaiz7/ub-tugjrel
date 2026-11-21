@@ -215,4 +215,29 @@ assert.strictEqual(rowsDone[0].answered, 10);
 assert.strictEqual(rowsDone[0].done, true);
 assert.strictEqual(rowsDone[0].score, 1000);
 
+assert.deepStrictEqual([0, 1, 2, 3, 5, 6, 9].map(core.comboMul), [1, 1, 1, 2, 2, 3, 3]);
+assert.strictEqual(core.lineScore(0, 3), 300);
+assert.strictEqual(core.lineScore(15000, 6), 300);
+assert.deepStrictEqual([0, 1, 2, 3, 4, 6].map(core.refills), [false, false, false, true, false, true]);
+assert.strictEqual(core.maxScore(10), 3450);
+assert.ok(core.maxScore(5) < core.maxScore(10));
+
+const comboActs = [
+  { player_id: "p5", q: 3, ok: true, ms: 15000, lives: 3, c: true },
+  { player_id: "p5", q: 0, ok: true, ms: 15000, lives: 3, c: true },
+  { player_id: "p5", q: 1, ok: true, ms: 15000, lives: 3, c: true },
+  { player_id: "p5", q: 2, ok: true, ms: 15000, lives: 3, c: true },
+  { player_id: "p5", q: 4, ok: true, ms: 15000, lives: 2, c: false },
+  { player_id: "p5", q: 5, ok: true, ms: 15000, lives: 2, c: true }
+];
+const comboRow = core.standings(["p5"], comboActs)[0];
+assert.strictEqual(comboRow.score, 100 + 100 + 200 + 200 + 100 + 100);
+assert.strictEqual(comboRow.streak, 1);
+assert.strictEqual(comboRow.lives, 2);
+const healedRow = core.standings(["p6"], [
+  { player_id: "p6", q: 0, ok: true, ms: 0, lives: 2, c: false },
+  { player_id: "p6", q: 1, ok: true, ms: 0, lives: 3, c: true }
+])[0];
+assert.strictEqual(healedRow.lives, 3);
+
 console.log("ok");
